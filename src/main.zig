@@ -26,7 +26,15 @@ const vertices = [8] Vec3_f32 {
     Vec3_f32 { 0.25, -0.25, -0.25 },
 };
 
-const index_buffer = [_]u32{ 0,1,2,3, 4,5,6,7, 0,4, 1,5, 2,6, 3,7 };
+const index_buffer = [_] u32 {
+    0, 1, 2, 3,
+    4, 5, 6, 7,
+    0, 4,
+    1, 5,
+    2, 6,
+    3, 7
+};
+
 const faces = [_] Face {
     .{ .start = 0,  .count = 4 },
     .{ .start = 4,  .count = 4 },
