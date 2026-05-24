@@ -2,7 +2,9 @@
 
 const std = @import("std");
 const sdl = @import("zsdl2");
+const mem = std.mem;
 
+const Vec2_i32 = @Vector(2, i32);
 const Vec2_u32 = @Vector(2, u32);
 const Vec2_f32 = @Vector(2, f32);
 const Vec3_f32 = @Vector(3, f32);
@@ -70,6 +72,82 @@ fn clearBackground(fb: *Framebuffer) void {
 fn point(fb: *Framebuffer, p: Vec2_u32) void {
     if ((0 <= p[0] and p[0] < width) and (0 <= p[1] and p[1] < height)) {
         fb.*[p[1] * width + p[0]] = 0xFF_00_FF_00;
+    }
+}
+
+fn fillTri(fb: *Framebuffer, a: Vec2_u32, b: Vec2_u32, c: Vec2_u32, color: u32) void {
+    // cast cast cast sahur
+    const ai = Vec2_i32{ @intCast(a[0]), @intCast(a[1]) };
+    const bi = Vec2_i32{ @intCast(b[0]), @intCast(b[1]) };
+    const ci = Vec2_i32{ @intCast(c[0]), @intCast(c[1]) };
+
+    // sort from Y ascending
+    var p = [3]Vec2_i32{ ai, bi, ci };
+    if (p[0][1] > p[1][1]) mem.swap(Vec2_i32, &p[0], &p[1]);
+    if (p[1][1] > p[2][1]) mem.swap(Vec2_i32, &p[1], &p[2]);
+    if (p[0][1] > p[1][1]) mem.swap(Vec2_i32, &p[0], &p[1]);
+
+    fillBottomTri(fb, p[0], p[1], p[2], color);
+    fillTopTri(fb, p[0], p[1], p[2], color);
+}
+
+fn fillBottomTri(fb: *Framebuffer, top: Vec2_i32, mid: Vec2_i32, bot: Vec2_i32, color: u32) void {
+    const dy_long  = bot[1] - top[1];
+    const dy_short = mid[1] - top[1];
+    if (dy_short == 0) {
+        return;
+    }
+
+    const y_start = @max(top[1], 0);
+    const y_end   = @min(mid[1], @as(i32, @intCast(height)));
+
+    var y = y_start;
+    while (y < y_end) : (y += 1) {
+        const t_long  = @as(f32, @floatFromInt(y - top[1])) / @as(f32, @floatFromInt(dy_long));
+        const t_short = @as(f32, @floatFromInt(y - top[1])) / @as(f32, @floatFromInt(dy_short));
+
+        var x_left  = top[0] + @as(i32, @intFromFloat(t_long  * @as(f32, @floatFromInt(bot[0] - top[0]))));
+        var x_right = top[0] + @as(i32, @intFromFloat(t_short * @as(f32, @floatFromInt(mid[0] - top[0]))));
+
+        if (x_left > x_right) mem.swap(i32, &x_left, &x_right);
+
+        fillHspan(fb, y, x_left, x_right, color);
+    }
+}
+
+fn fillTopTri(fb: *Framebuffer, top: Vec2_i32, mid: Vec2_i32, bot: Vec2_i32, color: u32) void {
+    const dy_long  = bot[1] - top[1];
+    const dy_short = bot[1] - mid[1];
+    if (dy_short == 0) {
+        return;
+    }
+
+    const y_start = @max(mid[1], 0);
+    const y_end   = @min(bot[1] + 1, @as(i32, @intCast(height)));
+
+    var y = y_start;
+    while (y < y_end) : (y += 1) {
+        const t_long  = @as(f32, @floatFromInt(y - top[1])) / @as(f32, @floatFromInt(dy_long));
+        const t_short = @as(f32, @floatFromInt(y - mid[1])) / @as(f32, @floatFromInt(dy_short));
+
+        var x_left  = top[0] + @as(i32, @intFromFloat(t_long  * @as(f32, @floatFromInt(bot[0] - top[0]))));
+        var x_right = mid[0] + @as(i32, @intFromFloat(t_short * @as(f32, @floatFromInt(bot[0] - mid[0]))));
+
+        if (x_left > x_right) mem.swap(i32, &x_left, &x_right);
+
+        fillHspan(fb, y, x_left, x_right, color);
+    }
+}
+
+inline fn fillHspan(fb: *Framebuffer, y: i32, x_left: i32, x_right: i32, color: u32) void {
+    const x0 = @as(usize, @intCast(@max(x_left,  0)));
+    const x1 = @as(usize, @intCast(@min(x_right, @as(i32, @intCast(width - 1)))));
+
+    const row = @as(usize, @intCast(y)) * width;
+
+    var x = x0;
+    while (x <= x1) : (x += 1) {
+        fb.*[row + x] = color;
     }
 }
 
@@ -178,17 +256,32 @@ pub fn main() !void {
             clearBackground(&framebuffer);
 
             for (faces) |f| {
-                for (0..f.count) |i| {
+                var i = @as(usize, 0);
+
+                while (i < f.count) : (i += 3) {
                     const a_idx = index_buffer[f.start + i];
-                    const b_idx = index_buffer[f.start + (i + 1) % f.count];
+                    const b_idx = index_buffer[f.start + i + 1];
+                    const c_idx = index_buffer[f.start + i + 2];
 
                     const a = vertices[@as(usize, a_idx)];
                     const b = vertices[@as(usize, b_idx)];
+                    const c = vertices[@as(usize, c_idx)];
 
-                    line(&framebuffer,
-                        screen(project(rotateXZ(a, angle) + Vec3_f32{ 0, 0, dz })) catch continue,
-                        screen(project(rotateXZ(b, angle) + Vec3_f32{ 0, 0, dz })) catch continue
-                    );
+                    const ta = screen(project(rotateXZ(a, angle) + Vec3_f32{ 0, 0, dz })) catch continue;
+                    const tb = screen(project(rotateXZ(b, angle) + Vec3_f32{ 0, 0, dz })) catch continue;
+                    const tc = screen(project(rotateXZ(c, angle) + Vec3_f32{ 0, 0, dz })) catch continue;
+
+                    // negative = facing away
+                    const ax: i32 = @intCast(ta[0]); const ay: i32 = @intCast(ta[1]);
+                    const bx: i32 = @intCast(tb[0]); const by: i32 = @intCast(tb[1]);
+                    const cx: i32 = @intCast(tc[0]); const cy: i32 = @intCast(tc[1]);
+
+                    const signed_area = (bx - ax) * (cy - ay) - (cx - ax) * (by - ay);
+                    if (signed_area <= 0) {
+                        continue; // ... so we don't render it
+                    }
+
+                    fillTri(&framebuffer, ta, tb, tc, 0xFF_00_FF_00);
                 }
             }
 
