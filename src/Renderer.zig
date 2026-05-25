@@ -57,12 +57,12 @@ pub const Renderer = struct {
     }
 
     pub fn clearBackground(self: *Renderer) void {
-        for (self.framebuffer) |*pixel| {
-            pixel.* = 0xFF_00_00_00
+        const color = 0xFF_00_00_00
                     | (@as(u32, self.background_color.r) << 16)
                     | (@as(u32, self.background_color.g) << 8)
                     | (@as(u32, self.background_color.b));
-        }
+        
+        @memset(self.framebuffer, color);
     }
 
     fn point(self: *Renderer, p: Vec2_u32) void {
