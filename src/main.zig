@@ -13,14 +13,20 @@ const types = @import("Types.zig");
 
 const window_size = types.Size2D{ .width = 800, .height = 600 };
 
+fn isPressed(state: []const u8, scancode: sdl.Scancode) bool {
+    return state[@intFromEnum(scancode)] != 0;
+}
+
 pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
 
     var platform = try Platform.init(allocator);
     defer platform.deinit();
 
+    var camera = types.Transform{};
+
     const window = try platform.createWindow("kebab", .centered, window_size);
-    var renderer = try Renderer.init(allocator, window, window_size);
+    var renderer = try Renderer.init(allocator, window, window_size, &camera);
     defer renderer.deinit();
 
     var scene = try Scene.init(allocator);
@@ -84,27 +90,40 @@ pub fn main(init: std.process.Init) !void {
 
     var running = true;
     var lastTime: u32 = 0;
+    var dt: f32 = 0;
 
     while (running) {
+
         { // events
             var event: sdl.Event = undefined;
             while (sdl.pollEvent(&event)) {
                 switch (event.type) {
                     .quit => running = false,
                     .keydown => {
-                        if (event.key.keysym.sym == .escape) running = false;
+                        const keycode = event.key.keysym.sym;
+                        if (keycode == .escape) running = false;
                     },
 
                     else => {}
                 }
             }
+
+            const state = sdl.getKeyboardState();
+            const factor = 2;
+
+            if (isPressed(state, .w))      camera.position[2] += dt * factor;
+            if (isPressed(state, .s))      camera.position[2] -= dt * factor;
+            if (isPressed(state, .a))      camera.position[0] -= dt * factor;
+            if (isPressed(state, .d))      camera.position[0] += dt * factor;
+            if (isPressed(state, .space))  camera.position[1] += dt * factor;
+            if (isPressed(state, .lshift)) camera.position[1] -= dt * factor;
         }
 
         const before = sdl.getPerformanceCounter();
 
         { // render
             renderer.clearBackground();
-            const dt = @as(f32, @floatFromInt(sdl.getTicks() - lastTime)) / 1000.0;
+            dt = @as(f32, @floatFromInt(sdl.getTicks() - lastTime)) / 1000.0;
 
             for (scene.instances.items) |*inst| {
                 inst.update(dt);

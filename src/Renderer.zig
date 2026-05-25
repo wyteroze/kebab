@@ -23,8 +23,9 @@ pub const Renderer = struct {
     framebuffer: []u32,
     width: c_int,
     height: c_int,
+    camera: *types.Transform,
 
-    pub fn init(allocator: std.mem.Allocator, window: *sdl.Window, size: types.Size2D) !Renderer {
+    pub fn init(allocator: std.mem.Allocator, window: *sdl.Window, size: types.Size2D, camera: *types.Transform) !Renderer {
         const width = @as(c_int, @intCast(size.width));
         const height = @as(c_int, @intCast(size.height));
 
@@ -39,7 +40,8 @@ pub const Renderer = struct {
             .sdl_texture = sdl_texture,
             .framebuffer = framebuffer,
             .width = width,
-            .height = height
+            .height = height,
+            .camera = camera
         };
     }
 
@@ -216,10 +218,12 @@ pub const Renderer = struct {
                 const b = mesh.vertices[@as(usize, b_idx)];
                 const c = mesh.vertices[@as(usize, c_idx)];
 
+                const camera_pos = self.camera.position;
+
                 const y = transform.rotation[1];
-                const ta = self.screen(self.project(self.rotateXZ(a, y) + transform.position)) catch continue;
-                const tb = self.screen(self.project(self.rotateXZ(b, y) + transform.position)) catch continue;
-                const tc = self.screen(self.project(self.rotateXZ(c, y) + transform.position)) catch continue;
+                const ta = self.screen(self.project(self.rotateXZ(a, y) + transform.position - camera_pos)) catch continue;
+                const tb = self.screen(self.project(self.rotateXZ(b, y) + transform.position - camera_pos)) catch continue;
+                const tc = self.screen(self.project(self.rotateXZ(c, y) + transform.position - camera_pos)) catch continue;
 
                 // negative = facing away
                 const ax: i32 = @intCast(ta.x); const ay: i32 = @intCast(ta.y);
