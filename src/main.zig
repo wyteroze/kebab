@@ -33,7 +33,7 @@ pub fn main(init: std.process.Init) !void {
     var renderer = try Renderer.init(allocator, window, .{ .x = width, .y = height }, &camera, true);
     defer renderer.deinit();
 
-    var cubeMesh = try Mesh.loadFromFile(allocator, io, "src/assets/models/utah_teapot_10x.obj");
+    var cubeMesh = try Mesh.loadFromFile(allocator, io, "src/assets/models/utah_teapot.obj");
     defer cubeMesh.deinit();
 
     var cube = Instance{
