@@ -3,240 +3,419 @@
 const std = @import("std");
 const sdl = @import("zsdl2");
 
-const Mesh = @import("Mesh.zig").Mesh;
-const types = @import("Types.zig");
+const math      = @import("math.zig");
+const types     = @import("types.zig");
+const Mesh      = @import("Mesh.zig").Mesh;
+const Camera    = @import("Camera.zig").Camera;
 
-const mem = std.mem;
+const Mat4 = types.Mat4;
+const Triangle  = types.Triangle;
+const Transform = types.Transform;
+const Vec3_SIMD = types.Vec3_SIMD;
+const Vec4_SIMD = types.Vec4_SIMD;
+pub const Vec2_cint = struct { x: c_int, y: c_int };
+pub const Plane = struct { point: Vec3_SIMD, normal: Vec3_SIMD };
 
-const Vec2_i32 = types.Vec2_i32;
-const Vec2_u32 = types.Vec2_u32;
-const Vec2_f32 = types.Vec2_f32;
-const Vec3_f32 = types.Vec3;
-const Vec3_u32 = types.Vec3_u32;
+const clear_color = 0xFF_8A_AA_FF;
 
 pub const Renderer = struct {
     allocator: std.mem.Allocator,
-    sdl_window: *sdl.Window,
-    sdl_renderer: *sdl.Renderer,
-    sdl_texture: *sdl.Texture,
-    background_color: types.Color3RGB = .{ .r = 138, .g = 170, .b = 255 },
+    renderer: *sdl.Renderer,
+    texture: *sdl.Texture,
     framebuffer: []u32,
-    width: c_int,
-    height: c_int,
-    camera: *types.Transform,
+    size: Vec2_cint,
+    camera: *Camera,
+    tri_buffer: std.ArrayList(Triangle),
+    tri_raster_list: std.ArrayList(Triangle),
 
-    pub fn init(allocator: std.mem.Allocator, window: *sdl.Window, size: types.Size2D, camera: *types.Transform) !Renderer {
-        const width = @as(c_int, @intCast(size.width));
-        const height = @as(c_int, @intCast(size.height));
-
-        const framebuffer = try allocator.alloc(u32, @as(usize, @intCast(width * height)));
-        const sdl_renderer = try sdl.Renderer.create(window, null, .{ .accelerated = true, .present_vsync = false });
-        const sdl_texture = try sdl.createTexture(sdl_renderer, .argb8888, .streaming, width, height);
+    pub fn init(allocator: std.mem.Allocator, window: *sdl.Window, size: Vec2_cint, camera: *Camera, vsync: ?bool) !Renderer {
+        const renderer = try sdl.createRenderer(window, null, .{ .accelerated = true, .present_vsync = vsync orelse false });
+        const texture = try sdl.createTexture(renderer, .argb8888, .streaming, size.x, size.y);
 
         return .{
             .allocator = allocator,
-            .sdl_window = window,
-            .sdl_renderer = sdl_renderer,
-            .sdl_texture = sdl_texture,
-            .framebuffer = framebuffer,
-            .width = width,
-            .height = height,
-            .camera = camera
+            .renderer = renderer,
+            .texture = texture,
+            .framebuffer = try allocator.alloc(u32, @as(usize, @intCast(size.x * size.y))),
+            .size = size,
+            .camera = camera,
+            .tri_buffer = std.ArrayList(Triangle).empty,
+            .tri_raster_list = std.ArrayList(Triangle).empty
         };
     }
 
     pub fn deinit(self: *Renderer) void {
+        self.renderer.destroy();
+        self.texture.destroy();
         self.allocator.free(self.framebuffer);
-        self.sdl_renderer.destroy();
-        self.sdl_texture.destroy();
+        self.tri_buffer.deinit(self.allocator);
+        self.tri_raster_list.deinit(self.allocator);
     }
 
-    pub fn draw(self: *Renderer) !void {
-        try self.sdl_texture.update(null, self.framebuffer.ptr, @as(c_int, @intCast(self.width)) * @sizeOf(u32));
-        try self.sdl_renderer.copy(self.sdl_texture, null, null);
+    pub fn present(self: Renderer) !void {
+        try sdl.updateTexture(self.texture, null, self.framebuffer.ptr, self.size.x * @sizeOf(u32));
+        try self.renderer.copy(self.texture, null, null);
 
-        self.sdl_renderer.present();
+        // renderer is sdl renderer, not this
+        self.renderer.present();
     }
 
-    pub fn clearBackground(self: *Renderer) void {
-        const color = 0xFF_00_00_00
-                    | (@as(u32, self.background_color.r) << 16)
-                    | (@as(u32, self.background_color.g) << 8)
-                    | (@as(u32, self.background_color.b));
 
-        @memset(self.framebuffer, color);
+    // rendering methods
+    pub fn drawBackground(self: *Renderer) void {
+        @memset(self.framebuffer, clear_color);
     }
 
-    fn point(self: *Renderer, p: Vec2_u32) void {
-        if ((0 <= p.x and p.x < self.width) and (0 <= p.y and p.y < self.height)) {
-            self.framebuffer[p[1] * self.width + p[0]] = 0xFF_00_FF_00;
+    pub fn drawMesh(self: *Renderer, mesh: *const Mesh, transform: *const Transform) !void {
+        const camera_transform = self.camera.transform;
+        const projection_matrix = self.camera.getProjectionMatrix();
+        const view_matrix = self.camera.getViewMatrix();
+
+        const rotationRad = transform.rotation * @as(Vec3_SIMD, @splat(std.math.pi / 180.0));
+        const rotate_x_matrix = Mat4{ .rows = .{
+            Vec4_SIMD{ 1, 0, 0, 0 },
+            Vec4_SIMD{ 0, @cos(rotationRad[0]), @sin(rotationRad[0]), 0 },
+            Vec4_SIMD{ 0, -@sin(rotationRad[0]), @cos(rotationRad[0]), 0 },
+            Vec4_SIMD{ 0, 0, 0, 1 },
+        }};
+
+        const rotate_y_matrix = Mat4{ .rows = .{
+            Vec4_SIMD{ @cos(rotationRad[1]), 0, @sin(rotationRad[1]), 0 },
+            Vec4_SIMD{ 0, 1, 0, 0 },
+            Vec4_SIMD{ -@sin(rotationRad[1]), 0, @cos(rotationRad[1]), 0 },
+            Vec4_SIMD{ 0, 0, 0, 1 }
+        }};
+
+        const rotate_z_matrix = Mat4{ .rows = .{
+            Vec4_SIMD{ @cos(rotationRad[2]), @sin(rotationRad[2]), 0, 0 },
+            Vec4_SIMD{ -@sin(rotationRad[2]), @cos(rotationRad[2]), 0, 0 },
+            Vec4_SIMD{ 0, 0, 1, 0 },
+            Vec4_SIMD{ 0, 0, 0, 1 }
+        }};
+
+        // ZYX order rotation
+        var world_matrix = math.multiplyMatrices(
+            math.multiplyMatrices(rotate_z_matrix, rotate_y_matrix),
+            rotate_x_matrix
+        );
+
+        // transform
+        world_matrix.rows[3] += Vec4_SIMD{
+            transform.position[0],
+            transform.position[1],
+            transform.position[2],
+            0.0
+        };
+
+        self.tri_buffer.clearRetainingCapacity();
+        for (mesh.faces) |*face| {
+            var i = @as(usize, 0);
+
+            while (i < face.length) : (i += 3) {
+                const ia = mesh.indices[face.start + i];
+                const ib = mesh.indices[face.start + i + 1];
+                const ic = mesh.indices[face.start + i + 2];
+
+                const va = math.multiplyMatrixVector(world_matrix, mesh.vertices[ia]);
+                const vb = math.multiplyMatrixVector(world_matrix, mesh.vertices[ib]);
+                const vc = math.multiplyMatrixVector(world_matrix, mesh.vertices[ic]);
+
+                // culling
+                const world_normal = math.normal(va, vb, vc);
+                const view_dir = math.normalize(va - camera_transform.position);
+                if (math.dot(world_normal, view_dir) >= 0.0) continue;
+
+                // lighting
+                const light_direction = math.normalize(Vec3_SIMD{ 0.0, 0.0, -1.0 });
+                const light_normal = math.dot(light_direction, world_normal);
+                const color = math.luminanceToRGB(light_normal);
+
+                // world space to view space
+                const view_space = [3]Vec3_SIMD{
+                    math.multiplyMatrixVector(view_matrix, va),
+                    math.multiplyMatrixVector(view_matrix, vb),
+                    math.multiplyMatrixVector(view_matrix, vc)
+                };
+
+                const depth = (view_space[0][2] + view_space[1][2] + view_space[2][2]) / 3.0;
+
+                const clip = math.clipTriangleAgainstPlane(Vec3_SIMD{ 0.0, 0.0, 0.1 }, Vec3_SIMD{ 0.0, 0.0, 1.0 }, .{
+                    .color = color,
+                    .depth = depth,
+                    .pa = view_space[0],
+                    .pb = view_space[1],
+                    .pc = view_space[2]
+                });
+
+                for (0..clip.n) |n| {
+                    const clipped = switch (n) {
+                        0 => clip.t1.?,
+                        1 => clip.t2.?,
+
+                        else => unreachable
+                    };
+
+                    // project from 3d to 2d
+                    var p = [3]Vec3_SIMD{
+                        math.multiplyMatrixVector(projection_matrix, clipped.pa),
+                        math.multiplyMatrixVector(projection_matrix, clipped.pb),
+                        math.multiplyMatrixVector(projection_matrix, clipped.pc)
+                    };
+
+                    // scale into view
+                    const sx = 0.5 * @as(f32, @floatFromInt(self.size.x));
+                    const sy = 0.5 * @as(f32, @floatFromInt(self.size.y));
+
+                    inline for (&p) |*v| {
+                        v[0] = (v[0] + 1.0) * sx;
+                        v[1] = (1.0 - v[1]) * sy; // invert y
+                    }
+
+                    // add to buffer to be rendered later
+                    try self.tri_buffer.append(self.allocator, .{
+                        .pa = p[0],
+                        .pb = p[1],
+                        .pc = p[2],
+                        .color = clipped.color,
+                        .depth = clipped.depth
+                    });
+                }
+            }
+        }
+
+        // sort: far triangles first
+        std.sort.pdq(Triangle, self.tri_buffer.items, {}, struct {
+            fn lessThan(_: void, a: Triangle, b: Triangle) bool {
+                return a.depth > b.depth;
+            }
+        }.lessThan);
+
+        const f_width  = @as(f32, @floatFromInt(self.size.x));
+        const f_height = @as(f32, @floatFromInt(self.size.y));
+
+        const planes = [4]Plane{
+            .{ .point = .{ 0.0,    0.0,     0.0 }, .normal = .{  0.0,  1.0, 0.0 } }, // top
+            .{ .point = .{ 0.0,    f_height, 0.0 }, .normal = .{  0.0, -1.0, 0.0 } }, // bottom
+            .{ .point = .{ 0.0,    0.0,     0.0 }, .normal = .{  1.0,  0.0, 0.0 } }, // left
+            .{ .point = .{ f_width, 0.0,    0.0 }, .normal = .{ -1.0,  0.0, 0.0 } }, // right
+        };
+
+        for (self.tri_buffer.items) |tri| {
+            self.tri_raster_list.clearRetainingCapacity();
+            try self.tri_raster_list.append(self.allocator, tri);
+
+            for (0..4) |p| {
+                const tris_to_process = self.tri_raster_list.items.len;
+
+                for (0..tris_to_process) |i| {
+                    const test_tri = self.tri_raster_list.items[i];
+
+                    const clip = switch (p) {
+                        0 => math.clipTriangleAgainstPlane(planes[0].point, planes[0].normal, test_tri),
+                        1 => math.clipTriangleAgainstPlane(planes[1].point, planes[1].normal, test_tri),
+                        2 => math.clipTriangleAgainstPlane(planes[2].point, planes[2].normal, test_tri),
+                        3 => math.clipTriangleAgainstPlane(planes[3].point, planes[3].normal, test_tri),
+
+                        else => unreachable,
+                    };
+
+                    for (0..clip.n) |w| {
+                        const clipped = if (w == 0) clip.t1.? else clip.t2.?;
+                        try self.tri_raster_list.append(self.allocator, clipped);
+                    }
+                }
+
+                self.tri_raster_list.replaceRangeAssumeCapacity(0, tris_to_process, &.{});
+            }
+
+            for (self.tri_raster_list.items) |final_tri| {
+                self.drawTriangle(final_tri.pa, final_tri.pb, final_tri.pc, final_tri.color);
+                //self.drawTriangleWireframe(final_tri.pa, final_tri.pb, final_tri.pc, 0xFF_00_00_00);
+            }
         }
     }
 
-    fn fillTri(self: *Renderer, a: Vec2_u32, b: Vec2_u32, c: Vec2_u32, color: u32) void {
-        const ai = Vec2_i32 { .x = @intCast(a.x), .y = @intCast(a.y) };
-        const bi = Vec2_i32 { .x = @intCast(b.x), .y = @intCast(b.y) };
-        const ci = Vec2_i32 { .x = @intCast(c.x), .y = @intCast(c.y) };
+    inline fn drawPoint(self: *Renderer, x: f32, y: f32, color: ?u32) void {
+        const fw = @as(f32, @floatFromInt(self.size.x));
+        const fh = @as(f32, @floatFromInt(self.size.y));
+        if (x < 0 or y < 0 or x >= fw or y >= fh) return;
 
-        // sort from Y ascending
-        var p = [3]Vec2_i32 { ai, bi, ci };
-        if (p[0].y > p[1].y) mem.swap(Vec2_i32, &p[0], &p[1]);
-        if (p[1].y > p[2].y) mem.swap(Vec2_i32, &p[1], &p[2]);
-        if (p[0].y > p[1].y) mem.swap(Vec2_i32, &p[0], &p[1]);
+        const ix = @as(usize, @intFromFloat(x));
+        const iy = @as(usize, @intFromFloat(y));
+        const width_usize = @as(usize, @intCast(self.size.x));
 
-        self.fillBottomTri(p[0], p[1], p[2], color);
-        self.fillTopTri(p[0], p[1], p[2], color);
+        const idx = iy * width_usize + ix;
+
+        if (idx >= self.framebuffer.len) return;
+        self.framebuffer[idx] = color orelse 0xFF_FF_FF_FF;
     }
 
-    fn fillBottomTri(self: *Renderer, top: Vec2_i32, mid: Vec2_i32, bot: Vec2_i32, color: u32) void {
-        const dy_long  = bot.y - top.y;
-        const dy_short = mid.y - top.y;
-        if (dy_short == 0) {
-            return;
-        }
+    fn drawLine(self: *Renderer, p0: Vec3_SIMD, p1: Vec3_SIMD, color: ?u32) void {
+        var x0 = @as(i32, @intFromFloat(p0[0]));
+        var y0 = @as(i32, @intFromFloat(p0[1]));
+        const x1 = @as(i32, @intFromFloat(p1[0]));
+        const y1 = @as(i32, @intFromFloat(p1[1]));
 
-        const y_start = @max(top.y, 0);
-        const y_end   = @min(mid.y, @as(i32, @intCast(self.height)));
-
-        var y = y_start;
-        while (y < y_end) : (y += 1) {
-            const t_long  = @as(f32, @floatFromInt(y - top.y)) / @as(f32, @floatFromInt(dy_long));
-            const t_short = @as(f32, @floatFromInt(y - top.y)) / @as(f32, @floatFromInt(dy_short));
-
-            var x_left  = top.x + @as(i32, @intFromFloat(t_long  * @as(f32, @floatFromInt(bot.x - top.x))));
-            var x_right = top.x + @as(i32, @intFromFloat(t_short * @as(f32, @floatFromInt(mid.x - top.x))));
-
-            if (x_left > x_right) mem.swap(i32, &x_left, &x_right);
-
-            self.fillHspan(y, x_left, x_right, color);
-        }
-    }
-
-    fn fillTopTri(self: *Renderer, top: Vec2_i32, mid: Vec2_i32, bot: Vec2_i32, color: u32) void {
-        const dy_long  = bot.y - top.y;
-        const dy_short = bot.y - mid.y;
-        if (dy_short == 0) {
-            return;
-        }
-
-        const y_start = @max(mid.y, 0);
-        const y_end   = @min(bot.y + 1, @as(i32, @intCast(self.height)));
-
-        var y = y_start;
-        while (y < y_end) : (y += 1) {
-            const t_long  = @as(f32, @floatFromInt(y - top.y)) / @as(f32, @floatFromInt(dy_long));
-            const t_short = @as(f32, @floatFromInt(y - mid.y)) / @as(f32, @floatFromInt(dy_short));
-
-            var x_left  = top.x + @as(i32, @intFromFloat(t_long  * @as(f32, @floatFromInt(bot.x - top.x))));
-            var x_right = mid.x + @as(i32, @intFromFloat(t_short * @as(f32, @floatFromInt(bot.x - mid.x))));
-
-            if (x_left > x_right) mem.swap(i32, &x_left, &x_right);
-
-            self.fillHspan(y, x_left, x_right, color);
-        }
-    }
-
-    inline fn fillHspan(self: *Renderer, y: i32, x_left: i32, x_right: i32, color: u32) void {
-        const x0 = @as(usize, @intCast(@max(x_left,  0)));
-        const x1 = @as(usize, @intCast(@min(x_right, @as(i32, @intCast(self.width - 1)))));
-
-        const row = @as(usize, @intCast(y)) * @as(usize, @intCast(self.width));
-
-        var x = x0;
-        while (x <= x1) : (x += 1) {
-            self.framebuffer[row + x] = color;
-        }
-    }
-
-    fn line(self: *Renderer, p1: Vec2_u32, p2: Vec2_u32) void {
-        var x0 = @as(i32, @intCast(p1.x));
-        var y0 = @as(i32, @intCast(p1.y));
-        const x1 = @as(i32, @intCast(p2.x));
-        const y1 = @as(i32, @intCast(p2.y));
-
-        const dx = @as(i32, @intCast(@abs(x1 - x0)));
-        const dy = @as(i32, @intCast(@abs(y1 - y0)));
+        const dx = @as(i32, if (x0 < x1) x1 - x0 else x0 - x1);
+        const dy = @as(i32, if (y0 < y1) y1 - y0 else y0 - y1);
         const sx = @as(i32, if (x0 < x1) 1 else -1);
         const sy = @as(i32, if (y0 < y1) 1 else -1);
         var err = dx - dy;
 
         while (true) {
-            self.point(Vec2_u32{ .x = @intCast(x0), .y = @intCast(y0) });
+            self.drawPoint(
+                @as(f32, @floatFromInt(x0)),
+                @as(f32, @floatFromInt(y0)),
+                color
+            );
             if (x0 == x1 and y0 == y1) break;
 
             const e2 = 2 * err;
             if (e2 > -dy) { err -= dy; x0 += sx; }
-            if (e2 < dx) { err += dx; y0 += sy; }
+            if (e2 <  dx) { err += dx; y0 += sy; }
         }
     }
 
-    fn screen(self: *Renderer, p: Vec2_f32) !Vec2_u32 {
-        const x = (p.x + 1) / 2 * @as(f32, @floatFromInt(self.width));
-        const y = (1 - (p.y + 1) / 2) * @as(f32, @floatFromInt(self.height));
+    fn drawTriangle(self: *Renderer, p0: Vec3_SIMD, p1: Vec3_SIMD, p2: Vec3_SIMD, color: ?u32) void {
+        var a = p0;
+        var b = p1;
+        var c = p2;
 
-        const w: f32 = @floatFromInt(self.width);
-        const h: f32 = @floatFromInt(self.height);
+        if (a[1] > b[1]) std.mem.swap(Vec3_SIMD, &a, &b);
+        if (b[1] > c[1]) std.mem.swap(Vec3_SIMD, &b, &c);
+        if (a[1] > b[1]) std.mem.swap(Vec3_SIMD, &a, &b);
 
-        if (x >= 0 and x < w and y >= 0 and y < h) {
-            return Vec2_u32{
-                .x = @intFromFloat(x),
-                .y = @intFromFloat(y),
-            };
-        }
+        const y_top    = a[1];
+        const y_mid    = b[1];
+        const y_bottom = c[1];
 
-        return error.PointOutOfBounds;
-    }
+        if (y_top == y_bottom) return;
 
-    fn project(_: *Renderer, p: @Vector(3, f32)) Vec2_f32 {
-        return Vec2_f32 {
-            .x = p[0] / p[2],
-            .y = p[1] / p[2]
-        };
-    }
+        const ac = (c[0] - a[0]) / (y_bottom - y_top);
+        const ab = if (y_mid != y_top)   (b[0] - a[0]) / (y_mid - y_top)    else 0.0;
+        const bc = if (y_bottom != y_mid) (c[0] - b[0]) / (y_bottom - y_mid) else 0.0;
 
-    fn rotateXZ(_: *Renderer, p: @Vector(3, f32), angle: f32) @Vector(3, f32) {
-        const c = @cos(angle);
-        const s = @sin(angle);
+        { // upper half
+            const y_start = @as(i32, @intFromFloat(@ceil(y_top)));
+            const y_end   = @as(i32, @intFromFloat(@ceil(y_mid)));
 
-        return @Vector(3, f32){
-            p[0] * c - p[2] * s,
-            p[1],
-            p[0] * s + p[2] * c
-        };
-    }
+            var y = y_start;
+            while (y < y_end) : (y += 1) {
+                const t = @as(f32, @floatFromInt(y));
+                var xa = a[0] + (t - y_top) * ac;
+                var xb = a[0] + (t - y_top) * ab;
+                if (xa > xb) std.mem.swap(f32, &xa, &xb);
 
-    pub fn renderMesh(self: *Renderer, mesh: *const Mesh, transform: types.Transform) void {
-        for (mesh.faces) |f| {
-            var i = @as(usize, 0);
+                const x0 = @as(i32, @intFromFloat(@ceil(xa)));
+                const x1 = @as(i32, @intFromFloat(@floor(xb))) + 1;
 
-            while (i < f.count) : (i += 3) {
-                const a_idx = mesh.indices[f.start + i];
-                const b_idx = mesh.indices[f.start + i + 1];
-                const c_idx = mesh.indices[f.start + i + 2];
-
-                const a = mesh.vertices[@as(usize, a_idx)];
-                const b = mesh.vertices[@as(usize, b_idx)];
-                const c = mesh.vertices[@as(usize, c_idx)];
-
-                const camera_pos = self.camera.position;
-
-                const y = transform.rotation[1];
-                const ta = self.screen(self.project(self.rotateXZ(a, y) + transform.position - camera_pos)) catch continue;
-                const tb = self.screen(self.project(self.rotateXZ(b, y) + transform.position - camera_pos)) catch continue;
-                const tc = self.screen(self.project(self.rotateXZ(c, y) + transform.position - camera_pos)) catch continue;
-
-                // negative = facing away
-                const ax: i32 = @intCast(ta.x); const ay: i32 = @intCast(ta.y);
-                const bx: i32 = @intCast(tb.x); const by: i32 = @intCast(tb.y);
-                const cx: i32 = @intCast(tc.x); const cy: i32 = @intCast(tc.y);
-
-                const signed_area = (bx - ax) * (cy - ay) - (cx - ax) * (by - ay);
-                if (signed_area <= 0) {
-                    continue; // ... so we don't render it
+                var x: i32 = x0;
+                while (x < x1) : (x += 1) {
+                    self.drawPoint(@floatFromInt(x), t, color);
                 }
-
-                self.fillTri(ta, tb, tc, 0xFF_00_FF_00);
             }
         }
+
+        { // lower half
+            const y_start = @as(i32, @intFromFloat(@ceil(y_mid)));
+            const y_end   = @as(i32, @intFromFloat(@ceil(y_bottom)));
+
+            var y = y_start;
+            while (y < y_end) : (y += 1) {
+                const t = @as(f32, @floatFromInt(y));
+                var xa = a[0] + (t - y_top) * ac;
+                var xb = b[0] + (t - y_mid) * bc;
+                if (xa > xb) std.mem.swap(f32, &xa, &xb);
+
+                const x0 = @as(i32, @intFromFloat(@ceil(xa)));
+                const x1 = @as(i32, @intFromFloat(@floor(xb))) + 1;
+
+                var x: i32 = x0;
+                while (x < x1) : (x += 1) {
+                    self.drawPoint(@floatFromInt(x), t, color);
+                }
+            }
+        }
+    }
+
+    fn drawTriangleWireframe(self: *Renderer, p0: Vec3_SIMD, p1: Vec3_SIMD, p2: Vec3_SIMD, color: ?u32) void {
+        self.drawLine(p0, p1, color);
+        self.drawLine(p1, p2, color);
+        self.drawLine(p2, p0, color);
+    }
+
+    pub fn visualizeAxes(self: *Renderer) void {
+        const projection_matrix = self.camera.getProjectionMatrix();
+        const view_matrix = self.camera.getViewMatrix();
+
+        const sx = 0.5 * @as(f32, @floatFromInt(self.size.x));
+        const sy = 0.5 * @as(f32, @floatFromInt(self.size.y));
+
+        // this changes the axis line length
+        const axis_length = @as(f32, 2.0);
+
+        // axes in world space
+        const world_origin = Vec3_SIMD{ 0.0, 0.0, 0.0 };
+        const world_x = Vec3_SIMD{ axis_length, 0.0, 0.0 };
+        const world_y = Vec3_SIMD{ 0.0, axis_length, 0.0 };
+        const world_z = Vec3_SIMD{ 0.0, 0.0, axis_length };
+
+        // view space
+        const view_origin = math.multiplyMatrixVector(view_matrix, world_origin);
+        const view_x = math.multiplyMatrixVector(view_matrix, world_x);
+        const view_y = math.multiplyMatrixVector(view_matrix, world_y);
+        const view_z = math.multiplyMatrixVector(view_matrix, world_z);
+
+        const LineClipper = struct {
+            fn drawClippedLine(
+                r: *Renderer,
+                p0_view: Vec3_SIMD,
+                p1_view: Vec3_SIMD,
+                proj: Mat4,
+                scale_x: f32,
+                scale_y: f32,
+                color: u32
+            ) void {
+                const near_z = 0.1;
+                const d0 = p0_view[2] - near_z;
+                const d1 = p1_view[2] - near_z;
+
+                var start = p0_view;
+                var end = p1_view;
+
+                // it's behind plane, discard
+                if (d0 < 0.0 and d1 < 0.0) return;
+
+                if (d0 < 0.0) { // clip start point if behind near plane
+                    start = math.vectorIntersectPlane(
+                        Vec3_SIMD{ 0.0, 0.0, near_z },
+                        Vec3_SIMD{ 0.0, 0.0, 1.0 },
+                        p0_view,
+                        p1_view
+                    );
+                } else if (d1 < 0.0) { // clip end point if behind near plane
+                    end = math.vectorIntersectPlane(
+                        Vec3_SIMD{ 0.0, 0.0, near_z },
+                        Vec3_SIMD{ 0.0, 0.0, 1.0 },
+                        p0_view,
+                        p1_view
+                    );
+                }
+
+                const proj_start = math.multiplyMatrixVector(proj, start);
+                const proj_end   = math.multiplyMatrixVector(proj, end);
+
+                // map to screen space
+                const screen_start = Vec3_SIMD{ (proj_start[0] + 1.0) * scale_x, (1.0 - proj_start[1]) * scale_y, 0.0 };
+                const screen_end   = Vec3_SIMD{ (proj_end[0] + 1.0) * scale_x,   (1.0 - proj_end[1]) * scale_y,   0.0 };
+
+                r.drawLine(screen_start, screen_end, color);
+            }
+        };
+
+        // draw
+        LineClipper.drawClippedLine(self, view_origin, view_x, projection_matrix, sx, sy, 0xFF_FF_00_00); // x = red
+        LineClipper.drawClippedLine(self, view_origin, view_y, projection_matrix, sx, sy, 0xFF_00_FF_00); // y = green
+        LineClipper.drawClippedLine(self, view_origin, view_z, projection_matrix, sx, sy, 0xFF_00_00_FF); // z = blue
     }
 };

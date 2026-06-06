@@ -1,22 +1,44 @@
 // Copyright 2026 wyteroze. Licensed under the Apache License, Version 2.0.
 
-// Engine/scripting types
-
+// Basic types
 pub const Vec3 = struct { x: f32, y: f32, z: f32 };
-pub const Mat4 = struct { data: [16]f32 };
-pub const Size2D = struct { width: u32, height: u32 };
-pub const Color3RGB = struct { r: u8, g: u8, b: u8 };
-pub const Transform = struct {
-    position: @Vector(3, f32) = @Vector(3, f32){ 0, 0, 0 },
-    rotation: @Vector(3, f32) = @Vector(3, f32){ 0, 0, 0 },
-    scale: @Vector(3, f32) = @Vector(3, f32){ 1, 1, 1 }
-};
+pub const Vec2 = struct { x: f32, y: f32 };
 
 // Internal types
-
-pub const Vec2_i32 = struct { x: i32, y: i32 };
+pub const Vec2_u16 = struct { x: u16, y: u16 };
 pub const Vec2_u32 = struct { x: u32, y: u32 };
-pub const Vec2_f32 = struct { x: f32, y: f32 };
-pub const Vec3_u32 = struct { x: u32, y: u32, z: u32 };
+pub const Vec4_SIMD = @Vector(4, f32);
+pub const Vec3_SIMD = @Vector(3, f32); // ignore fourth component, this is for optimization <- nvm
+pub const Face = struct {
+    start: usize, // index into indices
+    length: usize
+};
+pub const Triangle = struct {
+    pa: Vec3_SIMD,
+    pb: Vec3_SIMD,
+    pc: Vec3_SIMD,
+    color: u32, // 0x_AA_RR_GG_BB
+    depth: f32
+};
 
-pub const Face = struct { start: u32, count: u32 };
+pub const Mat4 = struct {
+    rows: [4]Vec4_SIMD,
+
+    pub fn initZero() Mat4 {
+        return .{ .rows = .{ @splat(0), @splat(0), @splat(0), @splat(0) } };
+    }
+};
+
+pub const Transform = struct {
+    scale: Vec3_SIMD,
+    position: Vec3_SIMD,
+    rotation: Vec3_SIMD,
+
+    pub fn identity() Transform {
+        return .{
+            .scale = Vec3_SIMD{ 0, 0, 0 },
+            .position = Vec3_SIMD{ 0, 0, 0 },
+            .rotation = Vec3_SIMD{ 0, 0, 0 },
+        };
+    }
+};

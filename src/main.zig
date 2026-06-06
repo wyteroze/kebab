@@ -2,16 +2,18 @@
 
 const std = @import("std");
 const sdl = @import("zsdl2");
-const mem = std.mem;
 
-const Platform = @import("Platform.zig").Platform;
-const Renderer = @import("Renderer.zig").Renderer;
-const Mesh = @import("Mesh.zig").Mesh;
-const Scene = @import("Scene.zig").Scene;
-const Instance = @import("Instance.zig").Instance;
-const types = @import("Types.zig");
+const types     = @import("types.zig");
+const Platform  = @import("Platform.zig").Platform;
+const Renderer  = @import("Renderer.zig").Renderer;
+const Mesh      = @import("Mesh.zig").Mesh;
+const Camera    = @import("Camera.zig").Camera;
+const Instance  = @import("Instance.zig").Instance;
 
-const window_size = types.Size2D{ .width = 800, .height = 600 };
+const fps = 120;
+const fps_ms = 1000 / fps;
+const width = 384;
+const height = 360;
 
 fn isPressed(state: []const u8, scancode: sdl.Scancode) bool {
     return state[@intFromEnum(scancode)] != 0;
@@ -19,122 +21,66 @@ fn isPressed(state: []const u8, scancode: sdl.Scancode) bool {
 
 pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
+    const io = init.io;
 
-    var platform = try Platform.init(allocator);
+    var platform = try Platform.init();
     defer platform.deinit();
 
-    var camera = types.Transform{};
+    var window = try platform.createWindow("kebab", .centered, .{ .x = width*2, .y = height*2 });
+    defer window.destroy();
 
-    const window = try platform.createWindow("kebab", .centered, window_size);
-    var renderer = try Renderer.init(allocator, window, window_size, &camera);
+    var camera = Camera.init(0.1, 1000.0, 90.0, @as(f32, @floatFromInt(height)) / @as(f32, @floatFromInt(width)));
+    var renderer = try Renderer.init(allocator, window, .{ .x = width, .y = height }, &camera, true);
     defer renderer.deinit();
 
-    var scene = try Scene.init(allocator);
-    defer scene.deinit();
+    var cubeMesh = try Mesh.loadFromFile(allocator, io, "src/assets/models/utah_teapot_10x.obj");
+    defer cubeMesh.deinit();
 
-    var cube_mesh = try Mesh.init(allocator,
-        &[_]@Vector(3, f32) {
-            .{ 0.25, 0.25, 0.25 },
-            .{ -0.25, 0.25, 0.25 },
-            .{ -0.25, -0.25, 0.25 },
-            .{ 0.25, -0.25, 0.25 },
+    var cube = Instance{
+        .mesh = &cubeMesh,
+        .transform = types.Transform.identity()
+    };
 
-            .{ 0.25, 0.25, -0.25 },
-            .{ -0.25, 0.25, -0.25 },
-            .{ -0.25, -0.25, -0.25 },
-            .{ 0.25, -0.25, -0.25 },
-        },
-
-        &[_]u32 {
-            // front
-            0, 1, 2,
-            0, 2, 3,
-
-            // back
-            4, 6, 5,
-            4, 7, 6,
-
-            // left
-            1, 5, 6,
-            1, 6, 2,
-
-            // right
-            4, 0, 3,
-            4, 3, 7,
-
-            // top
-            4, 5, 1,
-            4, 1, 0,
-
-            // bottom
-            3, 2, 6,
-            3, 6, 7,
-        },
-
-        &[_]types.Face {
-            .{ .start = 0,  .count = 6 },  // front
-            .{ .start = 6,  .count = 6 },  // back
-            .{ .start = 12, .count = 6 },  // left
-            .{ .start = 18, .count = 6 },  // right
-            .{ .start = 24, .count = 6 },  // top
-            .{ .start = 30, .count = 6 },  // bottom
-        }
-    );
-    defer cube_mesh.deinit();
-    try scene.instances.append(allocator, Instance{
-        .mesh = &cube_mesh,
-        .transform = types.Transform{
-            .position = @Vector(3, f32){ 0, 0, 1 }
-        }}
-    );
+    cube.transform.position[2] += 5.0;
 
     var running = true;
-    var lastTime: u32 = 0;
-    var dt: f32 = 0;
+    var lastTimeMs: u64 = sdl.getPerformanceCounter();
+    const frequency = @as(f32, @floatFromInt(sdl.getPerformanceFrequency()));
 
     while (running) {
+        const currentTime = sdl.getPerformanceCounter();
+        const dt = @as(f32, @floatFromInt(currentTime - lastTimeMs)) / frequency;
+        lastTimeMs = currentTime;
 
-        { // events
-            var event: sdl.Event = undefined;
-            while (sdl.pollEvent(&event)) {
-                switch (event.type) {
-                    .quit => running = false,
-                    .keydown => {
-                        const keycode = event.key.keysym.sym;
-                        if (keycode == .escape) running = false;
-                    },
-
-                    else => {}
-                }
+        // events
+        var event: sdl.Event = undefined;
+        while (sdl.pollEvent(&event)) {
+            if (event.type == .quit) {
+                running = false;
+            } else if (event.type == .mousemotion) {
+                camera.transform.rotation[0] += @as(f32, @floatFromInt(event.motion.yrel));
+                camera.transform.rotation[1] += @as(f32, @floatFromInt(event.motion.xrel));
             }
-
-            const state = sdl.getKeyboardState();
-            const factor = 2;
-
-            if (isPressed(state, .w))      camera.position[2] += dt * factor;
-            if (isPressed(state, .s))      camera.position[2] -= dt * factor;
-            if (isPressed(state, .a))      camera.position[0] -= dt * factor;
-            if (isPressed(state, .d))      camera.position[0] += dt * factor;
-            if (isPressed(state, .space))  camera.position[1] += dt * factor;
-            if (isPressed(state, .lshift)) camera.position[1] -= dt * factor;
         }
 
-        const before = sdl.getPerformanceCounter();
+        const state = sdl.getKeyboardState();
+        const factor = 2;
 
-        { // render
-            renderer.clearBackground();
-            dt = @as(f32, @floatFromInt(sdl.getTicks() - lastTime)) / 1000.0;
+        if (isPressed(state, .w))      camera.transform.position[2] += dt * factor;
+        if (isPressed(state, .s))      camera.transform.position[2] -= dt * factor;
+        if (isPressed(state, .a))      camera.transform.position[0] -= dt * factor;
+        if (isPressed(state, .d))      camera.transform.position[0] += dt * factor;
+        if (isPressed(state, .space))  camera.transform.position[1] += dt * factor;
+        if (isPressed(state, .lshift)) camera.transform.position[1] -= dt * factor;
 
-            for (scene.instances.items) |*inst| {
-                inst.update(dt);
-                renderer.renderMesh(inst.mesh, inst.transform);
-            }
+        // object updates
+        //cube.transform.rotation += types.Vec3_SIMD{ dt * 45, 0, dt * 45 };
 
-            try renderer.draw();
-            lastTime = sdl.getTicks();
-        }
+        // rendering
+        renderer.drawBackground();
+        try renderer.drawMesh(cube.mesh, &cube.transform);
+        renderer.visualizeAxes();
 
-        const after = sdl.getPerformanceCounter();
-        std.debug.print("render ms: {any}\n", .{1000*(@as(f32, @floatFromInt(after-before))/@as(f32, @floatFromInt(sdl.getPerformanceFrequency())))});
+        try renderer.present();
     }
 }
