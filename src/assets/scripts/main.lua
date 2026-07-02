@@ -6,7 +6,6 @@ local vec1 = Vec3.new(5, 10, 20)
 local vec2 = Vec3.new(-5, -10, -50)
 
 print(vec1 + vec2)
-error("aaaa")
 
 -- local myScene = Scene.new()
 
