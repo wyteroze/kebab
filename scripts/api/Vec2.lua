@@ -22,4 +22,4 @@ Vec2 = {}
 --- @param x number
 --- @param y number
 --- @return Vec2
-function Vec2.new(x, y, z) end
+function Vec2.new(x, y) end
