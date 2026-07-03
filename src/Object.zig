@@ -13,7 +13,15 @@ pub const Object = struct {
     data: union(ObjectKind) {
         mesh: MeshObject,
         image: ImageObject,
-        camera: CameraObject
+        camera: CameraObject,
+
+        pub fn luaName(self: @This()) []const u8 {
+            return switch (self) {
+                .mesh => "Mesh",
+                .image => "Image",
+                .camera => "Camera"
+            };
+        }
     }
 };
 

@@ -10,7 +10,7 @@ const Lua = zlua.Lua;
 var allocator: std.mem.Allocator = undefined;
 var sceneRegistry: *SceneRegistry = undefined;
 
-const ScenePtr = struct { ptr: *Scene };
+const ScenePtr = struct { ptr: *Scene, camera_ref: ?i32 = null };
 const RefCtx = struct { lua: *Lua, ref: i32 };
 const UpdateHandler = struct {
     lua: *Lua,
@@ -57,7 +57,7 @@ pub fn sceneNew(l: *Lua) i32 {
         l.raiseErrorStr("out of memory creating scene", .{});
         return 0;
     };
-    native_scene.* = Scene.init(allocator, name);
+    native_scene.* = Scene.init(allocator, name, null);
 
     const scene: *ScenePtr = l.newUserdata(ScenePtr, 0);
     scene.* = .{ .ptr = native_scene };
@@ -71,6 +71,60 @@ pub fn sceneNew(l: *Lua) i32 {
     };
 
     return 1;
+}
+
+pub fn sceneIndex(l: *Lua) i32 {
+    const self = l.checkUserdata(ScenePtr, 1, "Scene");
+    const key = l.checkString(2);
+
+    if (std.mem.eql(u8, key, "Camera")) {
+        if (self.camera_ref) |r| {
+            _ = l.getIndexRaw(zlua.registry_index, r);
+            return 1;
+        }
+
+        l.pushNil();
+        return 1;
+    }
+
+    _ = l.getField(zlua.registry_index, "Scene");
+    l.pushValue(2);
+    _ = l.getTable(-2);
+
+    if (!l.isNil(-1)) {
+        return 1;
+    }
+
+    l.raiseErrorStr("no property named '%s' exists", .{ key.ptr });
+    return 0;
+}
+
+pub fn sceneNewIndex(l: *Lua) i32 {
+    const self = l.checkUserdata(ScenePtr, 1, "Scene");
+    const key = l.checkString(2);
+
+    if (std.mem.eql(u8, key, "Camera")) {
+        const obj = l.checkUserdata(Object, 3, "Object");
+        switch (obj.data) {
+            .camera => |c| {
+                self.ptr.camera = c.camera;
+
+                if (self.camera_ref) |r| {
+                    l.unref(zlua.registry_index, r);
+                }
+
+                l.pushValue(3);
+                self.camera_ref = l.ref(zlua.registry_index);
+            },
+
+            else => l.raiseErrorStr("expected 'Camera' but got '%s'", .{ obj.data.luaName().ptr })
+        }
+
+        return 0;
+    }
+
+    l.raiseErrorStr("no property named '%s' exists, you can not assign to it", .{ key.ptr });
+    return 0;
 }
 
 pub fn sceneOnUpdate(l: *Lua) i32 {
@@ -122,6 +176,9 @@ pub fn sceneRemoveObject(l: *Lua) i32 {
 
 pub fn sceneGc(l: *Lua) i32 {
     const self = l.checkUserdata(ScenePtr, 1, "Scene");
+    if (self.camera_ref) |r| {
+        l.unref(zlua.registry_index, r);
+    }
 
     for (self.ptr.callbacks.items) |cb| {
         const handler = @as(*UpdateHandler, @ptrCast(@alignCast(cb.ctx.?)));
@@ -129,7 +186,6 @@ pub fn sceneGc(l: *Lua) i32 {
     }
 
     sceneRegistry.removeScene(self.ptr);
-
     return 0;
 }
 
@@ -160,8 +216,11 @@ pub fn register(l: *Lua, a: std.mem.Allocator, s: *SceneRegistry) !void {
 
     // Scene object
     try l.newMetatable("Scene");
-    l.pushValue(-1);
+    l.pushFunction(zlua.wrap(sceneIndex));
     l.setField(-2, "__index");
+    l.pushFunction(zlua.wrap(sceneNewIndex));
+    l.setField(-2, "__newindex");
+
     l.setFuncs(&scene_methods, 0);
     l.pop(1);
 

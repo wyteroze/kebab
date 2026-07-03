@@ -2,6 +2,7 @@
 
 const std = @import("std");
 const Object = @import("object.zig").Object;
+const Camera = @import("Camera.zig").Camera;
 
 pub const UpdateCallback = struct {
     ctx: ?*anyopaque,
@@ -13,13 +14,15 @@ pub const Scene = struct {
     objects: std.ArrayList(Object),
     name: ?[]const u8,
     callbacks: std.ArrayList(UpdateCallback),
+    camera: ?*Camera,
 
-    pub fn init(allocator: std.mem.Allocator, name: ?[]const u8) Scene {
+    pub fn init(allocator: std.mem.Allocator, name: ?[]const u8, camera: ?*Camera) Scene {
         return .{
             .name = name,
             .allocator = allocator,
             .objects = std.ArrayList(Object).empty,
-            .callbacks = std.ArrayList(UpdateCallback).empty
+            .callbacks = std.ArrayList(UpdateCallback).empty,
+            .camera = camera
         };
     }
 
