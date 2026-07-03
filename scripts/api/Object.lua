@@ -26,3 +26,7 @@ function Object.mesh(mesh, texture) end
 --- @param image ImageData
 --- @return Image
 function Object.image(image) end
+
+--- Returns a Camera, which can be assigned to a Scene
+--- @return Camera
+function Object.camera() end

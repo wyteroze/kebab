@@ -11,7 +11,7 @@ const Renderer      = @import("Renderer.zig").Renderer;
 const Mesh          = @import("Mesh.zig").Mesh;
 const Sprite        = @import("Sprite.zig").Sprite;
 const Camera        = @import("Camera.zig").Camera;
-const Object        = @import("Object.zig").Object;
+const Object        = @import("object.zig").Object;
 const ScriptEngine  = @import("script/ScriptEngine.zig").ScriptEngine;
 const SceneRegistry = @import("SceneRegistry.zig").SceneRegistry;
 
@@ -24,7 +24,7 @@ const height = 360;
 // are actually seen in the output
 pub const std_options: std.Options = .{
     // Default log level
-    .log_level = .info,
+    .log_level = .debug,
 
     // Filters for scopes
     .log_scope_levels = &.{
@@ -50,8 +50,7 @@ pub fn main(init: std.process.Init) !void {
     var window = try platform.createWindow("kebab", .centered, .{ .x = width*2, .y = height*2 });
     defer window.destroy();
 
-    var camera = Camera.init(0.1, 1000.0, 90.0, @as(f32, @floatFromInt(height)) / @as(f32, @floatFromInt(width)));
-    var renderer = try Renderer.init(allocator, window, .{ .x = width, .y = height }, &camera, true);
+    var renderer = try Renderer.init(allocator, window, .{ .x = width, .y = height }, true);
     defer renderer.deinit();
 
     var sceneRegistry = SceneRegistry.init(allocator);

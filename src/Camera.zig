@@ -13,24 +13,22 @@ pub const Camera = struct {
     nearPlane: f32,
     farPlane: f32,
     fov: f32,
-    aspectRatio: f32,
     transform: Transform,
 
-    pub fn init(nearPlane: f32, farPlane: f32, fov: f32, aspectRatio: f32) Camera {
+    pub fn init(nearPlane: f32, farPlane: f32, fov: f32) Camera {
         return .{
             .nearPlane = nearPlane,
             .farPlane = farPlane,
             .fov = fov,
-            .aspectRatio = aspectRatio,
             .transform = Transform.identity()
         };
     }
 
-    pub fn getProjectionMatrix(self: Camera) Mat4 {
+    pub fn getProjectionMatrix(self: Camera, aspectRatio: f32) Mat4 {
         const fov_rad = 1.0 / @tan((self.fov / 180.0 * std.math.pi)/2);
 
         return .{ .rows = .{
-            Vec4_SIMD{ self.aspectRatio * fov_rad, 0, 0, 0 },
+            Vec4_SIMD{ aspectRatio * fov_rad, 0, 0, 0 },
             Vec4_SIMD{ 0, fov_rad, 0, 0 },
             Vec4_SIMD{ 0, 0, self.farPlane / (self.farPlane - self.nearPlane), 1.0 },
             Vec4_SIMD{ 0, 0, (-self.farPlane * self.nearPlane) / (self.farPlane - self.nearPlane), 0 }

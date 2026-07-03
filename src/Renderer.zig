@@ -3,13 +3,14 @@
 const std = @import("std");
 const sdl = @import("zsdl2");
 
+const log       = @import("log.zig").render;
 const math      = @import("math.zig");
 const types     = @import("types.zig");
 const Mesh      = @import("Mesh.zig").Mesh;
 const Sprite    = @import("Sprite.zig").Sprite;
 const Camera    = @import("Camera.zig").Camera;
 const Scene     = @import("Scene.zig").Scene;
-const Object    = @import("Object.zig").Object;
+const Object    = @import("object.zig").Object;
 
 const Mat4 = types.Mat4;
 const Vertex = types.Vertex;
@@ -30,13 +31,15 @@ pub const Renderer = struct {
     framebuffer: []u32,
     depthbuffer: []f32,
     size: Vec2_cint,
-    camera: *Camera,
+    camera: ?*Camera,
+    default_camera: *Camera,
     tri_buffer: std.ArrayList(Triangle),
     tri_raster_list: std.ArrayList(Triangle),
 
-    pub fn init(allocator: std.mem.Allocator, window: *sdl.Window, size: Vec2_cint, camera: *Camera, vsync: ?bool) !Renderer {
+    pub fn init(allocator: std.mem.Allocator, window: *sdl.Window, size: Vec2_cint, vsync: ?bool) !Renderer {
         const renderer = try sdl.createRenderer(window, null, .{ .accelerated = true, .present_vsync = vsync orelse false });
         const texture = try sdl.createTexture(renderer, .argb8888, .streaming, size.x, size.y);
+        var default_camera = Camera.init(0.1, 1000.0, 90.0);
 
         return .{
             .allocator = allocator,
@@ -45,7 +48,8 @@ pub const Renderer = struct {
             .framebuffer = try allocator.alloc(u32, @as(usize, @intCast(size.x * size.y))),
             .depthbuffer = try allocator.alloc(f32, @as(usize, @intCast(size.x * size.y))),
             .size = size,
-            .camera = camera,
+            .camera = null,
+            .default_camera = &default_camera,
             .tri_buffer = std.ArrayList(Triangle).empty,
             .tri_raster_list = std.ArrayList(Triangle).empty
         };
@@ -76,23 +80,29 @@ pub const Renderer = struct {
     }
 
     pub fn drawScene(self: *Renderer, scene: *Scene) !void {
+        log.debug("{d} objects", .{scene.objects.items.len});
+
         for (scene.objects.items) |obj| {
             switch (obj.data) {
                 .mesh => |m| {
                     try self.drawMesh(m.mesh, m.texture, &obj.transform);
                 },
                 .image => |i| {
-                    // standalone image rendering is not supported yet
+                    log.warn("standalone image rendering is not supported yet", .{});
                     _ = i;
-                }
+                },
+                else => {}
             }
         }
     }
 
     pub fn drawMesh(self: *Renderer, mesh: *const Mesh, texture: ?*const Sprite, transform: *const Transform) !void {
-        const camera_transform = self.camera.transform;
-        const projection_matrix = self.camera.getProjectionMatrix();
-        const view_matrix = self.camera.getViewMatrix();
+        const aspect_ratio = @as(f32, @floatFromInt(self.size.x)) / @as(f32, @floatFromInt(self.size.y));
+        const camera = self.camera orelse self.default_camera;
+
+        const camera_transform = camera.transform;
+        const projection_matrix = camera.getProjectionMatrix(aspect_ratio);
+        const view_matrix = camera.getViewMatrix();
 
         const rotationRad = transform.rotation * @as(Vec3_SIMD, @splat(std.math.pi / 180.0));
         const rotate_x_matrix = Mat4{ .rows = .{
@@ -393,8 +403,9 @@ pub const Renderer = struct {
     }
 
     pub fn visualizeAxes(self: *Renderer) void {
-        const projection_matrix = self.camera.getProjectionMatrix();
-        const view_matrix = self.camera.getViewMatrix();
+        const camera = self.camera orelse self.default_camera;
+        const projection_matrix = camera.getProjectionMatrix();
+        const view_matrix = camera.getViewMatrix();
 
         const sx = 0.5 * @as(f32, @floatFromInt(self.size.x));
         const sy = 0.5 * @as(f32, @floatFromInt(self.size.y));

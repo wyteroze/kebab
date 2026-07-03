@@ -3,6 +3,9 @@ Copyright 2026 wyteroze. Licensed under the Apache License, Version 2.0.
 --]]
 
 local myScene = Scene.new("Test scene")
+local camera = Object.camera();
+camera.Position = Vec3.new(0, 0, -10)
+camera.Rotation = Vec3.new(0, 0, 0)
 
 local bullyMoonMesh = Assets.loadMesh("bullymoon.obj")
 local bullyMoonTex = Assets.loadImage("bullymoon.bmp")

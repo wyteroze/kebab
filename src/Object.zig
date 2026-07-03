@@ -5,17 +5,27 @@ const types = @import("types.zig");
 
 const Mesh = @import("Mesh.zig").Mesh;
 const Sprite = @import("Sprite.zig").Sprite;
-pub const ObjectKind = enum { mesh, image };
+const Camera = @import("Camera.zig").Camera;
+pub const ObjectKind = enum { mesh, image, camera };
 
 pub const Object = struct {
     transform: types.Transform,
     data: union(ObjectKind) {
-        mesh: struct {
-            mesh: *const Mesh,
-            texture: ?*const Sprite
-        },
-        image: struct {
-            image: *const Sprite
-        }
+        mesh: MeshObject,
+        image: ImageObject,
+        camera: CameraObject
     }
+};
+
+pub const MeshObject = struct {
+    mesh: *const Mesh,
+    texture: ?*const Sprite
+};
+
+pub const ImageObject = struct {
+    image: *const Sprite
+};
+
+pub const CameraObject = struct {
+    camera: *Camera
 };

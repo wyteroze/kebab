@@ -1,7 +1,7 @@
 // Copyright 2026 wyteroze. Licensed under the Apache License, Version 2.0.
 
 const std = @import("std");
-const Object = @import("Object.zig").Object;
+const Object = @import("object.zig").Object;
 
 pub const UpdateCallback = struct {
     ctx: ?*anyopaque,
