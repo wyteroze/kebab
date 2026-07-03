@@ -6,11 +6,13 @@ const Scene = @import("Scene.zig").Scene;
 pub const SceneRegistry = struct {
     allocator: std.mem.Allocator,
     scenes: std.ArrayList(*Scene),
+    current_scene: ?*Scene,
 
     pub fn init(allocator: std.mem.Allocator) SceneRegistry {
         return .{
             .allocator = allocator,
-            .scenes = std.ArrayList(*Scene).empty
+            .scenes = std.ArrayList(*Scene).empty,
+            .current_scene = null
         };
     }
 

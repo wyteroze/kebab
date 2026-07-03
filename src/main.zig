@@ -31,7 +31,7 @@ pub const std_options: std.Options = .{
         .{ .scope = .script, .level = .debug },
         .{ .scope = .render, .level = .info },
         .{ .scope = .parse, .level = .warn },
-        .{ .scope = .engine, .level = .info }
+        .{ .scope = .engine, .level = .debug }
     }
 };
 
@@ -82,7 +82,9 @@ pub fn main(init: std.process.Init) !void {
 
         // rendering
         renderer.drawBackground();
-        for (sceneRegistry.scenes.items) |s| {
+        const scene = sceneRegistry.current_scene;
+        if (scene) |s| {
+            log.debug("{s}", .{ s.name.? });
             try renderer.drawScene(s);
         }
 

@@ -9,6 +9,7 @@ const Object = @import("../object.zig").Object;
 const Lua = zlua.Lua;
 var allocator: std.mem.Allocator = undefined;
 var sceneRegistry: *SceneRegistry = undefined;
+var current_scene_ref: ?i32 = null;
 
 const ScenePtr = struct { ptr: *Scene, camera_ref: ?i32 = null };
 const RefCtx = struct { lua: *Lua, ref: i32 };
@@ -71,6 +72,55 @@ pub fn sceneNew(l: *Lua) i32 {
     };
 
     return 1;
+}
+
+ pub fn sceneLibNewIndex(l: *Lua) i32 {
+     const key = l.checkString(2);
+
+     if (std.mem.eql(u8, key, "CurrentScene")) {
+         if (l.isNil(3)) {
+             sceneRegistry.current_scene = null;
+
+             if (current_scene_ref) |r| {
+                 l.unref(zlua.registry_index, r);
+                 current_scene_ref = null;
+             }
+
+             return 0;
+         }
+
+         const scene_data = l.checkUserdata(ScenePtr, 3, "Scene");
+         sceneRegistry.current_scene = scene_data.ptr;
+
+         if (current_scene_ref) |r| {
+             l.unref(zlua.registry_index, r);
+         }
+
+         l.pushValue(3);
+         current_scene_ref = l.ref(zlua.registry_index);
+
+         return 0;
+     }
+
+     l.raiseErrorStr("no property named '%s' exists, you can not assign to it", .{ key.ptr });
+     return 0;
+ }
+
+pub fn sceneLibIndex(l: *Lua) i32 {
+    const key = l.checkString(2);
+
+    if (std.mem.eql(u8, key, "CurrentScene")) {
+        if (sceneRegistry.current_scene != null and current_scene_ref != null) {
+            _ = l.getIndexRaw(zlua.registry_index, current_scene_ref.?);
+            return 1;
+        }
+
+        l.pushNil();
+        return 1;
+    }
+
+    l.raiseErrorStr("no property named '%s' exists", .{ key.ptr });
+    return 0;
 }
 
 pub fn sceneIndex(l: *Lua) i32 {
@@ -176,6 +226,16 @@ pub fn sceneRemoveObject(l: *Lua) i32 {
 
 pub fn sceneGc(l: *Lua) i32 {
     const self = l.checkUserdata(ScenePtr, 1, "Scene");
+
+    if (sceneRegistry.current_scene == self.ptr) {
+        sceneRegistry.current_scene = null;
+
+        if (current_scene_ref) |r| {
+            l.unref(zlua.registry_index, r);
+            current_scene_ref = null;
+        }
+    }
+
     if (self.camera_ref) |r| {
         l.unref(zlua.registry_index, r);
     }
@@ -227,5 +287,13 @@ pub fn register(l: *Lua, a: std.mem.Allocator, s: *SceneRegistry) !void {
     // Scene library
     l.newTable();
     l.setFuncs(&scene_lib, 0);
+
+    l.newTable();
+    l.pushFunction(zlua.wrap(sceneLibIndex));
+    l.setField(-2, "__index");
+    l.pushFunction(zlua.wrap(sceneLibNewIndex));
+    l.setField(-2, "__newindex");
+    l.setMetatable(-2);
+
     l.setGlobal("Scene");
 }
