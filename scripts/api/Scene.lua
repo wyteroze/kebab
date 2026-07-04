@@ -17,7 +17,7 @@
 ---
 --- "Attaches" a function to the scene's update event.
 --- This function will be called every time the scene updates,
---- unless detached by calling the returned `detach` function once.
+--- unless detached by calling the returned function once.
 --- @field OnUpdate fun(self: Scene, callback: fun(delta: number)): fun()
 ---
 --- Adds an object to the scene's Objects list, making it visible. Does nothing if the object is already in the scene.
