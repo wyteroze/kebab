@@ -46,10 +46,10 @@ pub fn parseObj(allocator: std.mem.Allocator, reader: *std.Io.Reader) !Mesh {
         } else if (std.mem.startsWith(u8, line, "f ")) {
             const start_idx = indices.items.len;
 
-            try parseFaceLine(allocator, line, raw_positions.items, raw_uvs.items, &vertices, &indices);
+            const tri_count = try parseFaceLine(allocator, line, raw_positions.items, raw_uvs.items, &vertices, &indices);
             try faces.append(allocator, .{
                 .start = start_idx,
-                .length = 3
+                .length = tri_count * 3
             });
         }
     }
@@ -94,14 +94,19 @@ fn parseFaceLine(allocator: std.mem.Allocator,
     raw_uvs: []const Vec2_SIMD,
     vertices: *std.ArrayList(Vertex),
     indices: *std.ArrayList(usize)
-) !void {
+) !usize {
     var space_iter = std.mem.splitScalar(u8, line, ' ');
     _ = space_iter.next(); // consume "f"
 
     var corner_count: usize = 0;
+    var corner_indices: [32]usize = undefined;
+
     while (space_iter.next()) |corner_str| {
         if (corner_str.len == 0) continue;
-        if (corner_count >= 3) break;
+        if (corner_count >= corner_indices.len) {
+            log.warn("face has more corners than supported ({d}). truncating: '{s}'", .{ corner_indices.len, line });
+            break;
+        }
 
         var slash_iter = std.mem.splitScalar(u8, corner_str, '/');
 
@@ -137,7 +142,7 @@ fn parseFaceLine(allocator: std.mem.Allocator,
         // vertex
         const new_vertex = Vertex{ .position = pos, .uv = uv };
         try vertices.append(allocator, new_vertex);
-        try indices.append(allocator, vertices.items.len - 1);
+        corner_indices[corner_count] = vertices.items.len - 1;
 
         corner_count += 1;
     }
@@ -146,6 +151,18 @@ fn parseFaceLine(allocator: std.mem.Allocator,
         log.warn("face line has fewer than 3 corners: '{s}'", .{line});
         return ParseError.InvalidFaceData;
     }
+
+    // triangulate
+    var tri_count: usize = 0;
+    var i: usize = 1;
+    while (i + 1 < corner_count) : (i += 1) {
+        try indices.append(allocator, corner_indices[0]);
+        try indices.append(allocator, corner_indices[i]);
+        try indices.append(allocator, corner_indices[i + 1]);
+        tri_count += 1;
+    }
+
+    return tri_count;
 }
 
 

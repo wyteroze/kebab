@@ -14,6 +14,7 @@ const Camera        = @import("Camera.zig").Camera;
 const Object        = @import("object.zig").Object;
 const ScriptEngine  = @import("script/ScriptEngine.zig").ScriptEngine;
 const SceneRegistry = @import("SceneRegistry.zig").SceneRegistry;
+const scene = @import("Scene.zig");
 const lua_input = @import("script/lua_input.zig");
 
 const fps = 120;
@@ -44,6 +45,8 @@ pub fn main(init: std.process.Init) !void {
     log.info("Initializing...", .{});
     const allocator = init.gpa;
     const io = init.io;
+
+    scene.skybox_mesh = try Mesh.loadFromFile(allocator, io, "src/assets/models/skybox.obj");
 
     var platform = try Platform.init();
     defer platform.deinit();
@@ -85,8 +88,8 @@ pub fn main(init: std.process.Init) !void {
         // rendering
         renderer.drawBackground();
 
-        const scene = sceneRegistry.current_scene;
-        if (scene) |s| {
+        const current_scene = sceneRegistry.current_scene;
+        if (current_scene) |s| {
             s.update(dt);
             try renderer.drawScene(s);
         }

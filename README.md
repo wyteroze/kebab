@@ -18,3 +18,6 @@ I'll write this soon
 
 ## License
 Licensed under the [Apache 2.0 License](LICENSE)
+
+## Credits
+- Skyboxes: https://screamingbrainstudios.itch.io/planet-surface-skyboxes

@@ -6,6 +6,7 @@ const log = @import("../log.zig").lua;
 const Scene = @import("../Scene.zig").Scene;
 const SceneRegistry = @import("../SceneRegistry.zig").SceneRegistry;
 const Object = @import("../object.zig").Object;
+const Sprite = @import("../Sprite.zig").Sprite;
 const Lua = zlua.Lua;
 var allocator: std.mem.Allocator = undefined;
 var sceneRegistry: *SceneRegistry = undefined;
@@ -14,7 +15,8 @@ var current_scene_ref: ?i32 = null;
 const ScenePtr = struct {
     ptr: *Scene,
     camera_ref: ?i32 = null,
-    object_refs: std.AutoHashMap(*Object, i32) = undefined
+    object_refs: std.AutoHashMap(*Object, i32) = undefined,
+    skybox_texture_ref: ?i32 = null
 };
 const RefCtx = struct { lua: *Lua, ref: i32 };
 const UpdateHandler = struct {
@@ -62,7 +64,10 @@ pub fn sceneNew(l: *Lua) i32 {
         l.raiseErrorStr("out of memory creating scene", .{});
         return 0;
     };
-    native_scene.* = Scene.init(allocator, name, null);
+    native_scene.* = Scene.init(allocator, name, null) catch {
+        l.raiseErrorStr("failed to create scene", .{});
+        return 0;
+    };
 
     const scene: *ScenePtr = l.newUserdata(ScenePtr, 0);
     scene.* = .{ .ptr = native_scene, .object_refs = std.AutoHashMap(*Object, i32).init(allocator) };
@@ -139,6 +144,14 @@ pub fn sceneIndex(l: *Lua) i32 {
 
         l.pushNil();
         return 1;
+    } else if (std.mem.eql(u8, key, "SkyboxTexture")) {
+        if (self.skybox_texture_ref) |r| {
+            _ = l.getIndexRaw(zlua.registry_index, r);
+            return 1;
+        }
+
+        l.pushNil();
+        return 1;
     }
 
     _ = l.getField(zlua.registry_index, "Scene");
@@ -173,6 +186,18 @@ pub fn sceneNewIndex(l: *Lua) i32 {
 
             else => l.raiseErrorStr("expected 'Camera' but got '%s'", .{ obj.data.luaName().ptr })
         }
+
+        return 0;
+    } else if (std.mem.eql(u8, key, "SkyboxTexture")) {
+        const obj = l.checkUserdata(Sprite, 3, "ImageData");
+        self.ptr.skybox.texture = obj;
+
+        if (self.skybox_texture_ref) |r| {
+            l.unref(zlua.registry_index, r);
+        }
+
+        l.pushValue(3);
+        self.skybox_texture_ref = l.ref(zlua.registry_index);
 
         return 0;
     }
@@ -253,6 +278,9 @@ pub fn sceneGc(l: *Lua) i32 {
     }
 
     if (self.camera_ref) |r| {
+        l.unref(zlua.registry_index, r);
+    }
+    if (self.skybox_texture_ref) |r| {
         l.unref(zlua.registry_index, r);
     }
 

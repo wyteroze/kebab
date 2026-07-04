@@ -88,6 +88,11 @@ pub const Renderer = struct {
     pub fn drawScene(self: *Renderer, scene: *Scene) !void {
         //log.debug("{d} objects", .{scene.objects.items.len});
 
+        if (scene.skybox.texture != null) {
+            const skybox_pos = if (scene.camera) |c| &c.transform.onlyPosition() else &Transform.identity();
+            try self.drawMesh(&scene.skybox, scene.skybox.texture, skybox_pos, scene.camera);
+        }
+
         for (scene.objects.items) |obj| {
             switch (obj.data) {
                 .mesh => |m| {

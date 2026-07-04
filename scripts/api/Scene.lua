@@ -15,6 +15,9 @@
 --- The camera that's used to render the scene.
 --- @field Camera? Camera
 ---
+--- The image data that will be used for the skybox's texture. It expects a cubemap texture, otherwise the skybox may look bugged.
+--- @field SkyboxTexture? ImageData
+---
 --- "Attaches" a function to the scene's update event.
 --- This function will be called every time the scene updates,
 --- unless detached by calling the returned function once.

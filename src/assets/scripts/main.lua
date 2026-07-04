@@ -6,8 +6,8 @@ local camera = Object.camera();
 local myScene = Scene.new("Test scene")
 myScene.Camera = camera
 camera.Position = Vec3.new(0, 0, -5)
-camera.Rotation = Vec3.new(0, 0, 0)
 
+myScene.SkyboxTexture = Assets.loadImage("skyboxes/Ocean-1.bmp")
 Scene.CurrentScene = myScene
 
 local bullyMoonMesh = Assets.loadMesh("bullymoon.obj")

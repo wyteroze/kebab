@@ -1,8 +1,16 @@
 // Copyright 2026 wyteroze. Licensed under the Apache License, Version 2.0.
 
 const std = @import("std");
+const types = @import("types.zig");
+const Vec3_SIMD = types.Vec3_SIMD;
+const Vec2_SIMD = types.Vec2_SIMD;
+const Vertex = types.Vertex;
+const Face = types.Face;
+
 const Object = @import("object.zig").Object;
 const Camera = @import("Camera.zig").Camera;
+const Mesh = @import("Mesh.zig").Mesh;
+pub var skybox_mesh: ?Mesh = null;
 
 pub const UpdateCallback = struct {
     ctx: ?*anyopaque,
@@ -15,20 +23,23 @@ pub const Scene = struct {
     name: ?[]const u8,
     callbacks: std.ArrayList(UpdateCallback),
     camera: ?*Camera,
+    skybox: Mesh,
 
-    pub fn init(allocator: std.mem.Allocator, name: ?[]const u8, camera: ?*Camera) Scene {
+    pub fn init(allocator: std.mem.Allocator, name: ?[]const u8, camera: ?*Camera) !Scene {
         return .{
             .name = name,
             .allocator = allocator,
             .objects = std.ArrayList(*Object).empty,
             .callbacks = std.ArrayList(UpdateCallback).empty,
-            .camera = camera
+            .camera = camera,
+            .skybox = skybox_mesh orelse return error.SkyboxNotInitialized
         };
     }
 
     pub fn deinit(self: *Scene) void {
         self.objects.deinit(self.allocator);
         self.callbacks.deinit(self.allocator);
+        self.skybox.deinit();
     }
 
     pub fn addObject(self: *Scene, object: *Object) !void {

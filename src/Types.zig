@@ -41,6 +41,14 @@ pub const Transform = struct {
     position: Vec3_SIMD,
     rotation: Vec3_SIMD,
 
+    // Returns a copy of the Transform with only position
+    pub fn onlyPosition(self: *Transform) Transform {
+        var t = Transform.identity();
+        t.position = self.position;
+
+        return t;
+    }
+
     pub fn zero() Transform {
         return .{
             .scale = Vec3_SIMD{ 0, 0, 0 },
