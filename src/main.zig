@@ -14,6 +14,7 @@ const Camera        = @import("Camera.zig").Camera;
 const Object        = @import("object.zig").Object;
 const ScriptEngine  = @import("script/ScriptEngine.zig").ScriptEngine;
 const SceneRegistry = @import("SceneRegistry.zig").SceneRegistry;
+const lua_input = @import("script/lua_input.zig");
 
 const fps = 120;
 const fps_ms = 1000 / fps;
@@ -76,7 +77,8 @@ pub fn main(init: std.process.Init) !void {
         while (sdl.pollEvent(&event)) {
             switch (event.type) {
                 .quit => running = false,
-                else => {}
+
+                else => scriptEngine.handleInput(event)
             }
         }
 

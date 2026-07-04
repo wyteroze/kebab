@@ -86,13 +86,13 @@ fn vec3Get(l: *Lua) i32 {
     const vec = self.get();
 
     const key = l.checkString(2);
-    if (std.mem.eql(u8, key, "x")) {
+    if (std.mem.eql(u8, key, "X")) {
         l.pushNumber(vec[0]);
         return 1;
-    } else if (std.mem.eql(u8, key, "y")) {
+    } else if (std.mem.eql(u8, key, "Y")) {
         l.pushNumber(vec[1]);
         return 1;
-    } else if (std.mem.eql(u8, key, "z")) {
+    } else if (std.mem.eql(u8, key, "Z")) {
         l.pushNumber(vec[2]);
         return 1;
     }
@@ -110,13 +110,13 @@ fn vec3Set(l: *Lua) i32 {
     const key = l.checkString(2);
     const value = @as(f32, @floatCast(l.toNumber(3) catch 0));
 
-    if (std.mem.eql(u8, key, "x")) {
+    if (std.mem.eql(u8, key, "X")) {
         vec[0] = value;
         self.set(vec);
-    } else if (std.mem.eql(u8, key, "y")) {
+    } else if (std.mem.eql(u8, key, "Y")) {
         vec[1] = value;
         self.set(vec);
-    } else if (std.mem.eql(u8, key, "z")) {
+    } else if (std.mem.eql(u8, key, "Z")) {
         vec[2] = value;
         self.set(vec);
     } else {
@@ -227,10 +227,10 @@ fn vec2Get(l: *Lua) i32 {
     const vec = self.get();
     const key = l.checkString(2);
 
-    if (std.mem.eql(u8, key, "x")) {
+    if (std.mem.eql(u8, key, "X")) {
         l.pushNumber(vec[0]);
         return 1;
-    } else if (std.mem.eql(u8, key, "y")) {
+    } else if (std.mem.eql(u8, key, "Y")) {
         l.pushNumber(vec[1]);
         return 1;
     }
@@ -247,10 +247,10 @@ fn vec2Set(l: *Lua) i32 {
     const key = l.checkString(2);
     const value = @as(f32, @floatCast(l.toNumber(3) catch 0));
 
-    if (std.mem.eql(u8, key, "x")) {
+    if (std.mem.eql(u8, key, "X")) {
         vec[0] = value;
         self.set(vec);
-    } else if (std.mem.eql(u8, key, "y")) {
+    } else if (std.mem.eql(u8, key, "Y")) {
         vec[1] = value;
         self.set(vec);
     } else {
@@ -288,6 +288,19 @@ pub fn pushVec3Ref(l: *Lua, ptr: *Vec3_SIMD) void {
 
 pub fn checkVec3(l: *Lua, index: i32) Vec3_SIMD {
     const v = l.checkUserdata(Vec3Ref, index, "Vec3");
+
+    return v.get();
+}
+
+pub fn pushVec2(l: *Lua, v: Vec2_SIMD) void {
+    const vec = l.newUserdata(Vec2_SIMD, 0);
+    vec.* = v;
+
+    l.setMetatableRegistry("Vec2");
+}
+
+pub fn checkVec2(l: *Lua, index: i32) Vec2_SIMD {
+    const v = l.checkUserdata(Vec2Ref, index, "Vec2");
 
     return v.get();
 }

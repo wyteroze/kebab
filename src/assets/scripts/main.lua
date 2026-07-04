@@ -22,9 +22,25 @@ local uziCube = Object.mesh(uziMesh, uziTex)
 uziCube.Position = Vec3.new(2.5, 0, 0)
 myScene:AddObject(uziCube)
 
-print(bullyMoon.Scale, uziCube.Scale)
+Input.OnChange("MouseMove", function(input)
+    local delta = input.Delta
+    camera.Rotation:Add(Vec3.new(
+        delta.Y,
+        delta.X,
+        0
+    ))
+end)
 
 myScene:OnUpdate(function(dt)
+    local mul = Vec3.new(dt, dt, dt)
+
+    if Input.IsDown("W") then camera.Position:Add(camera.ForwardVector * mul) end
+    if Input.IsDown("S") then camera.Position:Sub(camera.ForwardVector * mul) end
+    if Input.IsDown("A") then camera.Position:Sub(camera.RightVector * mul) end
+    if Input.IsDown("D") then camera.Position:Add(camera.RightVector * mul) end
+    if Input.IsDown("Space") then camera.Position:Add(camera.UpVector * mul) end
+    if Input.IsDown("LeftShift") then camera.Position:Sub(camera.UpVector * mul) end
+
     bullyMoon.Rotation:Add(Vec3.new(0, dt * 50, 0))
     uziCube.Rotation:Add(Vec3.new(dt * 5, dt * 50, dt * 20))
 end)
