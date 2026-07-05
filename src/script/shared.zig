@@ -5,6 +5,10 @@ const zlua = @import("zlua");
 const log = @import("../log.zig").lua;
 const Lua = zlua.Lua;
 
+pub inline fn strEq(a: []const u8, b: []const u8) bool {
+    return std.mem.eql(u8, a, b);
+}
+
 pub fn setObjectMetatable(l: *Lua) void {
     l.setMetatableRegistry("Object");
 }
@@ -46,6 +50,36 @@ pub fn OwnedHandle(comptime Fn: type) type {
     };
 }
 
-pub inline fn strEq(a: []const u8, b: []const u8) bool {
-    return std.mem.eql(u8, a, b);
+pub fn Property(comptime T: type) type {
+    return struct {
+        name: []const u8,
+        get: ?*const fn (l: *Lua, self: *T) i32 = null,
+        set: ?*const fn (l: *Lua, self: *T) void = null
+    };
+}
+
+pub fn dispatchIndex(comptime T: type, comptime props: []const Property(T), l: *Lua, self: *T, key: []const u8) ?i32 {
+    inline for (props) |prop| {
+        if (strEq(key, prop.name)) {
+            if (prop.get) |g| { return g(l, self); }
+
+            l.raiseErrorStr("'%s' is write-only, you may not read from it", .{ key.ptr });
+            return 0;
+        }
+    }
+
+    return null;
+}
+
+pub fn dispatchNewIndex(comptime T: type, comptime props: []const Property(T), l: *Lua, self: *T, key: []const u8) ?void {
+    inline for (props) |prop| {
+        if (strEq(key, prop.name)) {
+            if (prop.set) |s| { s(l, self); return; }
+
+            l.raiseError("'%s' is read-only, you may not assign to it", .{ key.ptr });
+            return 0;
+        }
+    }
+
+    return null;
 }

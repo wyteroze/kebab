@@ -7,10 +7,13 @@ const types = @import("../types.zig");
 const Lua = zlua.Lua;
 const Vec2_SIMD = types.Vec2_SIMD;
 const Vec3_SIMD = types.Vec3_SIMD;
-const LuaTypeTag = shared.LuaTypeTag;
+const Property = shared.Property;
 
+const Vec3Ref = VecRef(Vec3_SIMD);
+const Vec2Ref = VecRef(Vec2_SIMD);
 fn VecRef(comptime T: type) type {
     return union(enum) {
+        pub const Inner = T;
         value: T,
         ptr: *T,
 
@@ -30,242 +33,151 @@ fn VecRef(comptime T: type) type {
     };
 }
 
-pub const Vec3Ref = VecRef(Vec3_SIMD);
-pub const Vec2Ref = VecRef(Vec2_SIMD);
+fn axisGet(comptime T: type, comptime i: AxisDict) fn (*Lua, *T) i32 {
+    return struct {
+        fn f(l: *Lua, self: *T) i32 {
+            l.pushNumber(self.get()[@intFromEnum(i)]);
+            return 1;
+        }
+    }.f;
+}
+
+fn axisSet(comptime T: type, comptime i: AxisDict) fn (*Lua, *T) void {
+    return struct {
+        fn f(l: *Lua, self: *T) void {
+            var v = self.get();
+            v[@intFromEnum(i)] = @as(f32, @floatCast(l.toNumber(3) catch 0));
+
+            self.set(v);
+        }
+    }.f;
+}
+
+fn VecOps(comptime T: type) type {
+    return struct {
+        fn add(a: T, b: T) T { return a + b; }
+        fn sub(a: T, b: T) T { return a - b; }
+        fn mul(a: T, b: T) T { return a * b; }
+        fn div(a: T, b: T) T { return a / b; }
+    };
+}
+
+fn vecOp(comptime R: type, comptime name: [:0]const u8, comptime op: fn(R.Inner, R.Inner) R.Inner) fn (*Lua) i32 {
+    return struct {
+        fn c(l: *Lua) i32 {
+            const self = l.checkUserdata(R, 1, name);
+            const other = l.checkUserdata(R, 2, name);
+            self.set(op(self.get(), other.get()));
+
+            l.pushValue(1);
+            return 1;
+        }
+    }.c;
+}
+
+fn vecNew(comptime R: type, comptime name: [:0]const u8, comptime n: usize) fn (*Lua) i32 {
+    return struct {
+        fn f(l: *Lua) i32 {
+            var arr: [n]f32 = undefined;
+            inline for (0..n) |i| {
+                arr[i] = @as(f32, @floatCast(l.toNumber(@intCast(i + 1)) catch 0));
+            }
+
+            const vec = l.newUserdata(R, 0);
+            vec.* = .{ .value = arr };
+            l.setMetatableRegistry(name);
+
+            return 1;
+        }
+    }.f;
+}
+
+
+fn vecGet(comptime R: type, comptime name: [:0]const u8, comptime props: []const Property(R)) fn (*Lua) i32 {
+    return struct {
+        fn f(l: *Lua) i32 {
+            const self = l.checkUserdata(R, 1, name);
+            const key = l.checkString(2);
+
+            if (shared.dispatchIndex(R, props, l, self, key)) |r| return r;
+
+            _ = l.getMetatableRegistry(name);
+            l.pushValue(2);
+            _ = l.getTableRaw(-2);
+            return 1;
+        }
+    }.f;
+}
+
+fn vecSet(comptime R: type, comptime name: [:0]const u8, comptime props: []const Property(R)) fn (*Lua) i32 {
+    return struct {
+        fn f(l: *Lua) i32 {
+            const self = l.checkUserdata(R, 1, name);
+            const key = l.checkString(2);
+
+            if (shared.dispatchNewIndex(R, props, l, self, key) != null) return 0;
+
+            l.raiseErrorStr("invalid field '%s'", .{key.ptr});
+            return 0;
+        }
+    }.f;
+}
 
 const vec3Lib = [_]zlua.FnReg{
     .{ .name = "new", .func = zlua.wrap(vec3New) }
-};
-
-const vec3Methods = [_]zlua.FnReg{
-    // methods
-    .{ .name = "Add", .func = zlua.wrap(vec3Add) },
-    .{ .name = "Sub", .func = zlua.wrap(vec3Subtract) },
-    .{ .name = "Mul", .func = zlua.wrap(vec3Multiply) },
-    .{ .name = "Div", .func = zlua.wrap(vec3Divide) },
-
-    // metamethods
-    .{ .name = "__add", .func = zlua.wrap(vec3Add) },
-    .{ .name = "__sub", .func = zlua.wrap(vec3Subtract) },
-    .{ .name = "__mul", .func = zlua.wrap(vec3Multiply) },
-    .{ .name = "__div", .func = zlua.wrap(vec3Divide) }
 };
 
 const vec2Lib = [_]zlua.FnReg{
     .{ .name = "new", .func = zlua.wrap(vec2New) }
 };
 
-const vec2Methods = [_]zlua.FnReg{
-    // methods
-    .{ .name = "Add", .func = zlua.wrap(vec2Add) },
-    .{ .name = "Sub", .func = zlua.wrap(vec2Subtract) },
-    .{ .name = "Mul", .func = zlua.wrap(vec2Multiply) },
-    .{ .name = "Div", .func = zlua.wrap(vec2Divide) },
-
-    // metamethods
-    .{ .name = "__add", .func = zlua.wrap(vec2Add) },
-    .{ .name = "__sub", .func = zlua.wrap(vec2Subtract) },
-    .{ .name = "__mul", .func = zlua.wrap(vec2Multiply) },
-    .{ .name = "__div", .func = zlua.wrap(vec2Divide) }
+const vec3Methods = [_]zlua.FnReg{
+    .{ .name = "Add", .func = zlua.wrap(vecOp(Vec3Ref, "Vec3", VecOps(Vec3_SIMD).add)) },
+    .{ .name = "Sub", .func = zlua.wrap(vecOp(Vec3Ref, "Vec3", VecOps(Vec3_SIMD).sub)) },
+    .{ .name = "Mul", .func = zlua.wrap(vecOp(Vec3Ref, "Vec3", VecOps(Vec3_SIMD).mul)) },
+    .{ .name = "Div", .func = zlua.wrap(vecOp(Vec3Ref, "Vec3", VecOps(Vec3_SIMD).div)) },
+    .{ .name = "__add", .func = zlua.wrap(vecOp(Vec3Ref, "Vec3", VecOps(Vec3_SIMD).add)) },
+    .{ .name = "__sub", .func = zlua.wrap(vecOp(Vec3Ref, "Vec3", VecOps(Vec3_SIMD).sub)) },
+    .{ .name = "__mul", .func = zlua.wrap(vecOp(Vec3Ref, "Vec3", VecOps(Vec3_SIMD).mul)) },
+    .{ .name = "__div", .func = zlua.wrap(vecOp(Vec3Ref, "Vec3", VecOps(Vec3_SIMD).div)) },
 };
 
+const vec2Methods = [_]zlua.FnReg{
+    .{ .name = "Add", .func = zlua.wrap(vecOp(Vec2Ref, "Vec2", VecOps(Vec2_SIMD).add)) },
+    .{ .name = "Sub", .func = zlua.wrap(vecOp(Vec2Ref, "Vec2", VecOps(Vec2_SIMD).sub)) },
+    .{ .name = "Mul", .func = zlua.wrap(vecOp(Vec2Ref, "Vec2", VecOps(Vec2_SIMD).mul)) },
+    .{ .name = "Div", .func = zlua.wrap(vecOp(Vec2Ref, "Vec2", VecOps(Vec2_SIMD).div)) },
+    .{ .name = "__add", .func = zlua.wrap(vecOp(Vec2Ref, "Vec2", VecOps(Vec2_SIMD).add)) },
+    .{ .name = "__sub", .func = zlua.wrap(vecOp(Vec2Ref, "Vec2", VecOps(Vec2_SIMD).sub)) },
+    .{ .name = "__mul", .func = zlua.wrap(vecOp(Vec2Ref, "Vec2", VecOps(Vec2_SIMD).mul)) },
+    .{ .name = "__div", .func = zlua.wrap(vecOp(Vec2Ref, "Vec2", VecOps(Vec2_SIMD).div)) },
+};
+
+const AxisDict = enum(usize) { x, y, z };
+const vec3_props = [_]Property(Vec3Ref){
+    .{ .name = "X", .get = axisGet(Vec3Ref, .x), .set = axisSet(Vec3Ref, .x) },
+    .{ .name = "Y", .get = axisGet(Vec3Ref, .y), .set = axisSet(Vec3Ref, .y) },
+    .{ .name = "Z", .get = axisGet(Vec3Ref, .z), .set = axisSet(Vec3Ref, .z) }
+};
+const vec2_props = [_]Property(Vec2Ref){
+    .{ .name = "X", .get = axisGet(Vec2Ref, .x), .set = axisSet(Vec2Ref, .x) },
+    .{ .name = "Y", .get = axisGet(Vec2Ref, .y), .set = axisSet(Vec2Ref, .y) },
+};
+
+const vec3New = vecNew(Vec3Ref, "Vec3", 3);
+const vec2New = vecNew(Vec2Ref, "Vec2", 2);
+const vec3Get = vecGet(Vec3Ref, "Vec3", &vec3_props);
+const vec2Get = vecGet(Vec2Ref, "Vec2", &vec2_props);
+const vec3Set = vecGet(Vec3Ref, "Vec3", &vec3_props);
+const vec2Set = vecGet(Vec2Ref, "Vec2", &vec2_props);
+
 // Vec3
-fn vec3New(l: *Lua) i32 {
-    const x = @as(f32, @floatCast(l.toNumber(1) catch 0));
-    const y = @as(f32, @floatCast(l.toNumber(2) catch 0));
-    const z = @as(f32, @floatCast(l.toNumber(3) catch 0));
-    const vec = l.newUserdata(Vec3Ref, 0);
-    vec.* = .{ .value = Vec3_SIMD { x, y, z } };
-
-    l.setMetatableRegistry("Vec3");
-    return 1;
-}
-
-fn vec3Get(l: *Lua) i32 {
-    const self = l.checkUserdata(Vec3Ref, 1, "Vec3");
-    const vec = self.get();
-
-    const key = l.checkString(2);
-    if (std.mem.eql(u8, key, "X")) {
-        l.pushNumber(vec[0]);
-        return 1;
-    } else if (std.mem.eql(u8, key, "Y")) {
-        l.pushNumber(vec[1]);
-        return 1;
-    } else if (std.mem.eql(u8, key, "Z")) {
-        l.pushNumber(vec[2]);
-        return 1;
-    }
-
-    _ = l.getMetatableRegistry("Vec3");
-    l.pushValue(2);
-    _ = l.getTableRaw(-2);
-    return 1;
-}
-
-fn vec3Set(l: *Lua) i32 {
-    const self = l.checkUserdata(Vec3Ref, 1, "Vec3");
-    var vec = self.get();
-
-    const key = l.checkString(2);
-    const value = @as(f32, @floatCast(l.toNumber(3) catch 0));
-
-    if (std.mem.eql(u8, key, "X")) {
-        vec[0] = value;
-        self.set(vec);
-    } else if (std.mem.eql(u8, key, "Y")) {
-        vec[1] = value;
-        self.set(vec);
-    } else if (std.mem.eql(u8, key, "Z")) {
-        vec[2] = value;
-        self.set(vec);
-    } else {
-        l.raiseErrorStr("invalid field '%s'", .{key.ptr});
-    }
-
-    return 0;
-}
-
-fn vec3Add(l: *Lua) i32 {
-    const self = l.checkUserdata(Vec3Ref, 1, "Vec3");
-    const other = l.checkUserdata(Vec3Ref, 2, "Vec3");
-    self.set(self.get() + other.get());
-
-    l.pushValue(1);
-    return 1;
-}
-
-fn vec3Subtract(l: *Lua) i32 {
-    const self = l.checkUserdata(Vec3Ref, 1, "Vec3");
-    const other = l.checkUserdata(Vec3Ref, 2, "Vec3");
-    self.set(self.get() - other.get());
-
-    l.pushValue(1);
-    return 1;
-}
-
-fn vec3Multiply(l: *Lua) i32 {
-    const self = l.checkUserdata(Vec3Ref, 1, "Vec3");
-    const other = l.checkUserdata(Vec3Ref, 2, "Vec3");
-    self.set(self.get() * other.get());
-
-    l.pushValue(1);
-    return 1;
-}
-
-fn vec3Divide(l: *Lua) i32 {
-    const self = l.checkUserdata(Vec3Ref, 1, "Vec3");
-    const other = l.checkUserdata(Vec3Ref, 2, "Vec3");
-    self.set(self.get() / other.get());
-
-    l.pushValue(1);
-    return 1;
-}
-
 fn vec3String(l: *Lua) i32 {
     const self = l.checkUserdata(Vec3Ref, 1, "Vec3");
     const vec = self.get();
 
     var buf: [96]u8 = undefined;
     const str = std.fmt.bufPrint(&buf, "({d}, {d}, {d})", .{ vec[0], vec[1], vec[2] }) catch |e|
-        l.raiseErrorStr("failed to format (%s)", .{ @errorName(e).ptr });
-
-    _ = l.pushString(str);
-    return 1;
-}
-
-// Vec2
-fn vec2New(l: *Lua) i32 {
-    const x = @as(f32, @floatCast(l.toNumber(1) catch 0));
-    const y = @as(f32, @floatCast(l.toNumber(2) catch 0));
-    const vec = l.newUserdata(Vec2Ref, 0);
-    vec.* = .{ .value = Vec2_SIMD { x, y } };
-
-    l.setMetatableRegistry("Vec2");
-    return 1;
-}
-
-fn vec2Add(l: *Lua) i32 {
-    const self = l.checkUserdata(Vec2Ref, 1, "Vec2");
-    const other = l.checkUserdata(Vec2Ref, 2, "Vec2");
-    self.set(self.get() + other.get());
-
-    l.pushValue(1);
-    return 1;
-}
-
-fn vec2Subtract(l: *Lua) i32 {
-    const self = l.checkUserdata(Vec2Ref, 1, "Vec2");
-    const other = l.checkUserdata(Vec2Ref, 2, "Vec2");
-    self.set(self.get() - other.get());
-
-    l.pushValue(1);
-    return 1;
-}
-
-fn vec2Multiply(l: *Lua) i32 {
-    const self = l.checkUserdata(Vec2Ref, 1, "Vec2");
-    const other = l.checkUserdata(Vec2Ref, 2, "Vec2");
-    self.set(self.get() * other.get());
-
-    l.pushValue(1);
-    return 1;
-}
-
-fn vec2Divide(l: *Lua) i32 {
-    const self = l.checkUserdata(Vec2Ref, 1, "Vec2");
-    const other = l.checkUserdata(Vec2Ref, 2, "Vec2");
-    self.set(self.get() / other.get());
-
-    l.pushValue(1);
-    return 1;
-}
-
-
-fn vec2Get(l: *Lua) i32 {
-    const self = l.checkUserdata(Vec2Ref, 1, "Vec2");
-    const vec = self.get();
-    const key = l.checkString(2);
-
-    if (std.mem.eql(u8, key, "X")) {
-        l.pushNumber(vec[0]);
-        return 1;
-    } else if (std.mem.eql(u8, key, "Y")) {
-        l.pushNumber(vec[1]);
-        return 1;
-    }
-
-    _ = l.getMetatableRegistry("Vec2");
-    l.pushValue(2);
-    _ = l.getTableRaw(-2);
-    return 1;
-}
-
-fn vec2Set(l: *Lua) i32 {
-    const self = l.checkUserdata(Vec2Ref, 1, "Vec2");
-    var vec = self.get();
-    const key = l.checkString(2);
-    const value = @as(f32, @floatCast(l.toNumber(3) catch 0));
-
-    if (std.mem.eql(u8, key, "X")) {
-        vec[0] = value;
-        self.set(vec);
-    } else if (std.mem.eql(u8, key, "Y")) {
-        vec[1] = value;
-        self.set(vec);
-    } else {
-        l.raiseErrorStr("invalid field '%s'", .{key.ptr});
-    }
-
-    return 0;
-}
-
-fn vec2String(l: *Lua) i32 {
-    const self = l.checkUserdata(Vec2Ref, 1, "Vec2");
-    const vec = self.get();
-
-    var buf: [64]u8 = undefined;
-    const str = std.fmt.bufPrint(&buf, "({d}, {d})", .{ vec[0], vec[1] }) catch |e|
         l.raiseErrorStr("failed to format (%s)", .{ @errorName(e).ptr });
 
     _ = l.pushString(str);
@@ -290,6 +202,19 @@ pub fn checkVec3(l: *Lua, index: i32) Vec3_SIMD {
     const v = l.checkUserdata(Vec3Ref, index, "Vec3");
 
     return v.get();
+}
+
+// Vec2
+fn vec2String(l: *Lua) i32 {
+    const self = l.checkUserdata(Vec2Ref, 1, "Vec2");
+    const vec = self.get();
+
+    var buf: [64]u8 = undefined;
+    const str = std.fmt.bufPrint(&buf, "({d}, {d})", .{ vec[0], vec[1] }) catch |e|
+        l.raiseErrorStr("failed to format (%s)", .{ @errorName(e).ptr });
+
+    _ = l.pushString(str);
+    return 1;
 }
 
 pub fn pushVec2(l: *Lua, v: Vec2_SIMD) void {
