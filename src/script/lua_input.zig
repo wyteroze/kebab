@@ -2,10 +2,11 @@
 
 const std = @import("std");
 const zlua = @import("zlua");
-const sdl = @import("zsdl2");
+const sdl3 = @import("sdl3");
 const shared = @import("shared.zig");
 const types = @import("../types.zig");
 const lua_vec = @import("lua_vec.zig");
+const Platform = @import("../Platform.zig").Platform;
 const log = @import("../log.zig").lua;
 const Lua = zlua.Lua;
 const Vec2_SIMD = types.Vec2_SIMD;
@@ -64,34 +65,42 @@ const code_map = std.StaticStringMap(InputCode).initComptime(blk: {
     break :blk entries;
 });
 
-pub fn fromScancode(sc: sdl.Scancode) ?InputCode {
-    return switch (sc) {
+pub fn fromSdlKeyCode(sc: ?sdl3.keycode.Keycode) ?InputCode {
+    if (sc == null) return null;
+
+    return switch (sc.?) {
         .a => .A, .b => .B, .c => .C, .d => .D, .e => .E, .f => .F, .g => .G, .h => .H,
         .i => .I, .j => .J, .k => .K, .l => .L, .m => .M, .n => .N, .o => .O, .p => .P,
         .q => .Q, .r => .R, .s => .S, .t => .T, .u => .U, .v => .V, .w => .W, .x => .X,
         .y => .Y, .z => .Z,
         .escape => .Escape,
-        .f1 => .F1, .f2 => .F2, .f3 => .F3, .f4 => .F4, .f5 => .F5, .f6 => .F6,
-        .f7 => .F7, .f8 => .F8, .f9 => .F9, .f10 => .F10, .f11 => .F11, .f12 => .F12,
-        .tab => .Tab, .backspace => .Backspace, .capslock => .CapsLock, .@"return" => .Enter,
-        .lshift => .LeftShift, .rshift => .RightShift,
-        .lctrl => .LeftControl, .rctrl => .RightControl,
-        .lalt => .LeftAlt, .ralt => .RightAlt,
-        .lgui => .LeftSuper, .rgui => .RightSuper,
+        .func1 => .F1, .func2 => .F2, .func3 => .F3, .func4 => .F4, .func5 => .F5, .func6 => .F6,
+        .func7 => .F7, .func8 => .F8, .func9 => .F9, .func10 => .F10, .func11 => .F11, .func12 => .F12,
+        .tab => .Tab, .backspace => .Backspace, .caps_lock => .CapsLock, .return_key => .Enter,
+        .left_shift => .LeftShift, .right_shift => .RightShift,
+        .left_ctrl => .LeftControl, .right_ctrl => .RightControl,
+        .left_alt => .LeftAlt, .right_alt => .RightAlt,
+        .left_gui => .LeftSuper, .right_gui => .RightSuper,
         .up => .Up, .down => .Down, .left => .Left, .right => .Right,
         .comma => .Comma, .period => .Period, .semicolon => .Semicolon, .apostrophe => .Quote,
-        .leftbracket => .LeftBracket, .rightbracket => .RightBracket,
+        .left_bracket => .LeftBracket, .right_bracket => .RightBracket,
         .backslash => .Backslash, .slash => .Slash, .grave => .Backquote,
         .minus => .Minus, .equals => .Equal, .space => .Space,
+        .pipe => .Pipe, .tilde => .Tilde, .exclaim => .Exclamation, .at => .At, .hash => .Hashtag,
+        .dollar => .Dollar, .percent => .Percent, .caret => .Caret, .ampersand => .Ampersand,
+        .asterisk => .Asterisk, .left_paren => .LeftParen, .right_paren => .RightParen,
+        .underscore => .Underscore, .plus => .Plus, .left_brace => .LeftBrace, .right_brace => .RightBrace,
+        .colon => .Colon, .dblapostrophe => .DoubleQuote, .greater => .GreaterThan, .less => .LessThan,
+        .question => .Question,
         else => null,
     };
 }
 
-pub fn fromMouseButton(button: u8) ?InputCode {
+pub fn fromMouseButton(button: sdl3.mouse.Button) ?InputCode {
     return switch (button) {
-        1 => .LeftMouseButton,
-        3 => .RightMouseButton,
-        2 => .MiddleMouseButton,
+        .left => .LeftMouseButton,
+        .right => .RightMouseButton,
+        .middle => .MiddleMouseButton,
         else => null,
     };
 }
@@ -114,6 +123,7 @@ const Callback = struct {
 var allocator: std.mem.Allocator = undefined;
 var callbacks: std.ArrayList(*Callback) = undefined;
 var down_state: std.AutoHashMap(InputCode, InputValue) = undefined;
+var window: sdl3.video.Window = undefined;
 
 pub fn pushInputTable(l: *Lua, code: InputCode, value: InputValue, delta: InputValue, user_index: i32) void {
     l.newTable();
@@ -289,17 +299,26 @@ fn inputIndex(l: *Lua) i32 {
 fn inputNewIndex(l: *Lua) i32 {
     const key = l.checkString(2);
     if (std.mem.eql(u8, key, "MouseLocked")) {
-        log.warn("modifying Input.MouseLocked has no effect due to SDL issues", .{});
+        const locked = l.toBoolean(3);
+        sdl3.mouse.setWindowRelativeMode(window, locked) catch {
+            l.raiseErrorStr("failed to set mouse lock to '%s'", .{ locked });
+            return 0;
+        };
 
         return 0;
     } else if (std.mem.eql(u8, key, "MouseVisible")) {
         const visible = l.toBoolean(3);
-        sdl.showCursor(
-            if (visible) .disable else .enable
-        ) catch {
-            l.raiseErrorStr("failed to set mouse visibility to '%s'", .{ visible });
-            return 0;
-        };
+        if (visible) {
+            sdl3.mouse.show() catch {
+                l.raiseErrorStr("failed to show mouse cursor", .{});
+                return 0;
+            };
+        } else {
+            sdl3.mouse.hide() catch {
+                l.raiseErrorStr("failed to hide mouse cursor", .{});
+                return 0;
+            };
+        }
 
         return 0;
     }
@@ -316,7 +335,8 @@ const input_lib = [_]zlua.FnReg{
     .{ .name = "GetValue", .func = zlua.wrap(inputGetValue) },
 };
 
-pub fn register(l: *Lua, a: std.mem.Allocator) !void {
+pub fn register(l: *Lua, a: std.mem.Allocator, w: sdl3.video.Window) !void {
+    window = w;
     allocator = a;
     callbacks = std.ArrayList(*Callback).empty;
     down_state = std.AutoHashMap(InputCode, InputValue).init(allocator);

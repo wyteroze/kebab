@@ -8,13 +8,13 @@
     .minimum_zig_version = "0.16.0",
 
     .dependencies = .{
-        .zsdl = .{
-            .url = "git+https://github.com/zig-gamedev/zsdl#3dc74d96c72a3467e9b49b596deaccc8346c5fa8",
-            .hash = "zsdl-0.4.0-dev-rFpjE7jpXwBGY4QQSsKCQU4sAhFQt20rSCEpweF-PP4g",
-        },
         .zlua = .{
             .url = "git+https://github.com/natecraddock/ziglua#d59103e257b25ae892cdede9a671366e8d4f3e51",
             .hash = "zlua-0.1.0-hGRpC4aUBQCOTE7WgTqCz0YBVUUaIpqDu1cNBu8nN6jH",
+        },
+        .sdl3 = .{
+            .url = "git+https://codeberg.org/7Games/zig-sdl3?ref=v0.2.2#83c694024f23cbacfa36fcd8fca1c57d4957203e",
+            .hash = "sdl3-0.2.2-NmT1Q-2jKQBa4uSXUwuVwdmXpXe-eYwim7Wkyx531v6O",
         },
     },
 

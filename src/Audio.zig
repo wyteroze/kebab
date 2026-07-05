@@ -1,7 +1,6 @@
 // Copyright 2026 wyteroze. Licensed under the Apache License, Version 2.0.
 
 const std = @import("std");
-const sdl = @import("zsdl2");
 const wav_parser = @import("parsers/wav.zig");
 
 pub const Audio = struct {

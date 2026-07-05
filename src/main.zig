@@ -1,7 +1,7 @@
 // Copyright 2026 wyteroze. Licensed under the Apache License, Version 2.0.
 
 const std = @import("std");
-const sdl = @import("zsdl2");
+const sdl3 = @import("sdl3");
 const zlua = @import("zlua");
 
 const types         = @import("types.zig");
@@ -37,7 +37,7 @@ pub const std_options: std.Options = .{
     }
 };
 
-fn isPressed(state: []const u8, scancode: sdl.Scancode) bool {
+fn isPressed(state: []const u8, scancode: sdl3.Scancode) bool {
     return state[@intFromEnum(scancode)] != 0;
 }
 
@@ -51,14 +51,14 @@ pub fn main(init: std.process.Init) !void {
     var platform = try Platform.init();
     defer platform.deinit();
 
-    var window = try platform.createWindow("kebab", .centered, .{ .x = width*2, .y = height*2 });
-    defer window.destroy();
+    var window = try platform.createWindow("kebab", .{ .centered = null }, .{ .centered = null }, .{ .x = width*2, .y = height*2 });
+    defer window.deinit();
 
-    var renderer = try Renderer.init(allocator, window, .{ .x = width, .y = height }, true);
+    var renderer = try Renderer.init(allocator, window, .{ .x = width, .y = height });
     defer renderer.deinit();
 
     var sceneRegistry = SceneRegistry.init(allocator);
-    var scriptEngine = try ScriptEngine.init(allocator, io, &sceneRegistry);
+    var scriptEngine = try ScriptEngine.init(allocator, io, &sceneRegistry, window);
     defer sceneRegistry.deinit();
     defer scriptEngine.deinit();
 
@@ -66,22 +66,21 @@ pub fn main(init: std.process.Init) !void {
     log.info("Initialized", .{});
 
     var running = true;
-    var lastTimeMs: u64 = sdl.getPerformanceCounter();
-    const frequency = @as(f32, @floatFromInt(sdl.getPerformanceFrequency()));
+    var lastTimeMs: u64 = sdl3.timer.getPerformanceCounter();
+    const frequency = @as(f32, @floatFromInt(sdl3.timer.getPerformanceFrequency()));
 
     log.info("Starting loop", .{});
     while (running) {
-        const currentTime = sdl.getPerformanceCounter();
+        const currentTime = sdl3.timer.getPerformanceCounter();
         const dt = @as(f32, @floatFromInt(currentTime - lastTimeMs)) / frequency;
         lastTimeMs = currentTime;
 
         // events
-        var event: sdl.Event = undefined;
-        while (sdl.pollEvent(&event)) {
-            switch (event.type) {
+        while (sdl3.events.poll()) |e| {
+            switch (e) {
                 .quit => running = false,
 
-                else => scriptEngine.handleInput(event)
+                else => scriptEngine.handleInput(e)
             }
         }
 

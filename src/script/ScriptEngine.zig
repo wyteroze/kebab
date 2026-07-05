@@ -1,7 +1,7 @@
 // Copyright 2026 wyteroze. Licensed under the Apache License, Version 2.0.
 
 const std = @import("std");
-const sdl = @import("zsdl2");
+const sdl3 = @import("sdl3");
 const zlua = @import("zlua");
 const Lua = zlua.Lua;
 
@@ -18,7 +18,7 @@ const SceneRegistry = @import("../SceneRegistry.zig").SceneRegistry;
 pub const ScriptEngine = struct {
     lua: *Lua,
 
-    pub fn init(allocator: std.mem.Allocator, io: std.Io, sceneRegistry: *SceneRegistry) !ScriptEngine {
+    pub fn init(allocator: std.mem.Allocator, io: std.Io, sceneRegistry: *SceneRegistry, window: sdl3.video.Window) !ScriptEngine {
         var lua = try Lua.init(allocator);
         lua.openLibs();
 
@@ -27,7 +27,7 @@ pub const ScriptEngine = struct {
         try lua_scene.register(lua, allocator, sceneRegistry);
         try lua_object.register(lua, allocator);
         try lua_assets.register(lua, allocator, io);
-        try lua_input.register(lua, allocator);
+        try lua_input.register(lua, allocator, window);
 
         return .{
             .lua = lua
@@ -90,41 +90,41 @@ pub const ScriptEngine = struct {
         lua_input.fireChange(code, value, delta, user_index);
     }
 
-    pub fn handleInput(_: *ScriptEngine, event: sdl.Event) void {
-        switch (event.type) {
-            .keydown => if (event.key.repeat == 0) {
-                if (lua_input.fromScancode(event.key.keysym.scancode)) |code| {
+    pub fn handleInput(_: *ScriptEngine, event: sdl3.events.Event) void {
+        switch (event) {
+            .key_down => |k| if (!k.repeat) {
+                if (lua_input.fromSdlKeyCode(k.key)) |code| {
                     lua_input.fireBegin(code, .{ .scalar = 1 }, 1);
                 }
             },
-            .keyup => {
-                if (lua_input.fromScancode(event.key.keysym.scancode)) |code| {
+            .key_up => |k| {
+                if (lua_input.fromSdlKeyCode(k.key)) |code| {
                     lua_input.fireEnd(code, 1);
                 }
             },
-            .mousebuttondown => {
-                if (lua_input.fromMouseButton(event.button.button)) |code| {
+            .mouse_button_down => |m| {
+                if (lua_input.fromMouseButton(m.button)) |code| {
                     lua_input.fireBegin(code, .{ .scalar = 1 }, 1);
                 }
             },
-            .mousebuttonup => {
-                if (lua_input.fromMouseButton(event.button.button)) |code| {
+            .mouse_button_up => |m| {
+                if (lua_input.fromMouseButton(m.button)) |code| {
                     lua_input.fireEnd(code, 1);
                 }
             },
-            .mousemotion => {
+            .mouse_motion => |m| {
                 lua_input.fireChange(
                     .MouseMove,
-                    .{ .vec2 = .{ @floatFromInt(event.motion.x), @floatFromInt(event.motion.y) } },
-                    .{ .vec2 = .{ @floatFromInt(event.motion.xrel), @floatFromInt(event.motion.yrel) } },
+                    .{ .vec2 = .{ m.x, m.y } },
+                    .{ .vec2 = .{ m.x_rel, m.y_rel } },
                     1,
                 );
             },
-            .mousewheel => {
+            .mouse_wheel => |m| {
                 lua_input.fireChange(
                     .MouseScroll,
-                    .{ .vec2 = .{ @floatFromInt(event.wheel.x), @floatFromInt(event.wheel.y) } },
-                    .{ .vec2 = .{ @floatFromInt(event.wheel.x), @floatFromInt(event.wheel.y) } },
+                    .{ .vec2 = .{ m.scroll_x, m.scroll_y } },
+                    .{ .vec2 = .{ m.scroll_x, m.scroll_y } },
                     1,
                 );
             },

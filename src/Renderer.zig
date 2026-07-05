@@ -1,7 +1,7 @@
 // Copyright 2026 wyteroze. Licensed under the Apache License, Version 2.0.
 
 const std = @import("std");
-const sdl = @import("zsdl2");
+const sdl3 = @import("sdl3");
 
 const log       = @import("log.zig").render;
 const math      = @import("math.zig");
@@ -19,25 +19,27 @@ const Transform = types.Transform;
 const Vec2_SIMD = types.Vec2_SIMD;
 const Vec3_SIMD = types.Vec3_SIMD;
 const Vec4_SIMD = types.Vec4_SIMD;
-pub const Vec2_cint = struct { x: c_int, y: c_int };
+pub const Vec2_usize = struct { x: usize, y: usize };
 pub const Plane = struct { point: Vec3_SIMD, normal: Vec3_SIMD };
 
 const clear_color = 0xFF_8A_AA_FF;
 
 pub const Renderer = struct {
     allocator: std.mem.Allocator,
-    renderer: *sdl.Renderer,
-    texture: *sdl.Texture,
-    framebuffer: []u32,
+    window: sdl3.video.Window,
+    window_surface: sdl3.surface.Surface,
+    canvas: sdl3.surface.Surface,
     depthbuffer: []f32,
-    size: Vec2_cint,
+    size: Vec2_usize,
     default_camera: *Camera,
     tri_buffer: std.ArrayList(Triangle),
     tri_raster_list: std.ArrayList(Triangle),
 
-    pub fn init(allocator: std.mem.Allocator, window: *sdl.Window, size: Vec2_cint, vsync: ?bool) !Renderer {
-        const renderer = try sdl.createRenderer(window, null, .{ .accelerated = true, .present_vsync = vsync orelse false });
-        const texture = try sdl.createTexture(renderer, .argb8888, .streaming, size.x, size.y);
+    pub fn init(allocator: std.mem.Allocator, window: sdl3.video.Window, size: Vec2_usize) !Renderer {
+        const window_surface = try sdl3.video.Window.getSurface(window);
+        const canvas = try sdl3.surface.Surface.init(size.x, size.y, .array_bgra_32);
+
+        const depthbuffer = try allocator.alloc(f32, @as(usize, @intCast(size.x * size.y)));
 
         const default_transform = try allocator.create(Transform);
         default_transform.* = Transform.identity();
@@ -48,11 +50,11 @@ pub const Renderer = struct {
 
         return .{
             .allocator = allocator,
-            .renderer = renderer,
-            .texture = texture,
-            .framebuffer = try allocator.alloc(u32, @as(usize, @intCast(size.x * size.y))),
-            .depthbuffer = try allocator.alloc(f32, @as(usize, @intCast(size.x * size.y))),
+            .window_surface = window_surface,
+            .canvas = canvas,
+            .depthbuffer = depthbuffer,
             .size = size,
+            .window = window,
             .default_camera = default_camera,
             .tri_buffer = std.ArrayList(Triangle).empty,
             .tri_raster_list = std.ArrayList(Triangle).empty
@@ -60,9 +62,8 @@ pub const Renderer = struct {
     }
 
     pub fn deinit(self: *Renderer) void {
-        self.renderer.destroy();
-        self.texture.destroy();
-        self.allocator.free(self.framebuffer);
+        self.window_surface.deinit();
+        self.canvas.deinit();
         self.allocator.free(self.depthbuffer);
         self.allocator.destroy(self.default_camera.transform);
         self.allocator.destroy(self.default_camera);
@@ -71,18 +72,22 @@ pub const Renderer = struct {
     }
 
     pub fn present(self: Renderer) !void {
-        try sdl.updateTexture(self.texture, null, self.framebuffer.ptr, self.size.x * @sizeOf(u32));
-        try self.renderer.copy(self.texture, null, null);
-
-        // renderer is sdl renderer, not this
-        self.renderer.present();
+        try self.canvas.blitScaled(null, self.window_surface, null, .nearest);
+        try self.window.updateSurface();
     }
 
 
     // rendering methods
     pub fn drawBackground(self: *Renderer) void {
-        @memset(self.framebuffer, clear_color);
+        @memset(self.getPixels(), clear_color);
         @memset(self.depthbuffer, 0.0);
+    }
+
+    inline fn getPixels(self: *Renderer) []u32 {
+        const bytes = self.canvas.getPixels().?;
+        const ptr: [*]u32 = @ptrCast(@alignCast(bytes.ptr));
+
+        return ptr[0 .. bytes.len / @sizeOf(u32)];
     }
 
     pub fn drawScene(self: *Renderer, scene: *Scene) !void {
@@ -311,12 +316,13 @@ pub const Renderer = struct {
 
         const ix = @as(usize, @intFromFloat(x));
         const iy = @as(usize, @intFromFloat(y));
-        const width_usize = @as(usize, @intCast(self.size.x));
+        // const width_usize = @as(usize, @intCast(self.size.x));
+        const width_usize = @divExact(@as(usize, @intCast(self.canvas.value.pitch)), @sizeOf(u32));
 
         const idx = iy * width_usize + ix;
 
-        if (idx >= self.framebuffer.len) return;
-        self.framebuffer[idx] = color orelse 0xFF_FF_FF_FF;
+        if (idx >= self.getPixels().len) return;
+        self.getPixels()[idx] = color orelse 0xFF_FF_FF_FF;
     }
 
     fn drawLine(self: *Renderer, p0: Vec3_SIMD, p1: Vec3_SIMD, color: ?u32) void {
