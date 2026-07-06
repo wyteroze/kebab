@@ -3,7 +3,7 @@
 const std = @import("std");
 const bmp_parser = @import("parsers/bmp.zig");
 
-pub const Sprite = struct {
+pub const ImageData = struct {
     allocator: std.mem.Allocator,
     width: u32,
     height: u32,
@@ -11,7 +11,7 @@ pub const Sprite = struct {
     // ARGB top to bottom
     pixels: []u32,
 
-    pub fn loadFromFile(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !Sprite {
+    pub fn loadFromFile(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !ImageData {
         var file = try std.Io.Dir.cwd().openFile(io, path, .{});
         defer file.close(io);
 
@@ -20,17 +20,17 @@ pub const Sprite = struct {
         var file_reader = file.reader(io, &buffer);
         const reader = &file_reader.interface;
 
-        const mesh = try bmp_parser.parseBmp(allocator, reader);
-        return mesh;
+        const image_data = try bmp_parser.parseBmp(allocator, reader);
+        return image_data;
     }
 
-    pub fn deinit(self: Sprite, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: ImageData, allocator: std.mem.Allocator) void {
         allocator.free(self.pixels);
     }
 
     /// U and V range from 0.0 - 1.0, other values
     /// are clamped.
-    pub fn sample(self: Sprite, u: f32, v: f32) u32 {
+    pub fn sample(self: ImageData, u: f32, v: f32) u32 {
         const cu = std.math.clamp(u, 0.0, 1.0);
         const cv = std.math.clamp(v, 0.0, 1.0);
 

@@ -6,8 +6,8 @@ const log = @import("../log.zig").lua;
 const types = @import("../types.zig");
 const shared = @import("shared/shared.zig");
 const Object = @import("../object.zig").Object;
-const Mesh = @import("../Mesh.zig").Mesh;
-const Sprite = @import("../Sprite.zig").Sprite;
+const MeshData = @import("../MeshData.zig").MeshData;
+const ImageData = @import("../ImageData.zig").ImageData;
 const Camera = @import("../Camera.zig").Camera;
 const Lua = zlua.Lua;
 
@@ -21,7 +21,7 @@ var allocator: std.mem.Allocator = undefined;
 const scene_object_methods = [_]zlua.FnReg{};
 
 const object_lib = [_]zlua.FnReg{
-    .{ .name = "mesh", .func = zlua.wrap(objectMesh) },
+    .{ .name = "mesh_data", .func = zlua.wrap(objectMesh) },
     .{ .name = "image", .func = zlua.wrap(objectImage) },
     .{ .name = "camera", .func = zlua.wrap(objectCamera) }
 };
@@ -35,7 +35,7 @@ fn objectIndex(l: *Lua) i32 {
 
     const result = switch (obj.data) {
         .camera => |*c| lua_camera.index(l, c, key),
-        .mesh => |*m| lua_mesh.index(l, m, key),
+        .mesh_data => |*m| lua_mesh.index(l, m, key),
         .image => |*i| lua_image.index(l, i, key),
     };
     if (result) |r| return r;
@@ -53,7 +53,7 @@ fn objectNewIndex(l: *Lua) i32 {
 
     const handled = switch (obj.data) {
         .camera => |*c| lua_camera.newIndex(l, c, key),
-        .mesh => |*m| lua_mesh.newIndex(l, m, key),
+        .mesh_data => |*m| lua_mesh.newIndex(l, m, key),
         .image => |*i| lua_image.newIndex(l, i, key),
     };
     if (handled != null) return 0;
@@ -89,7 +89,7 @@ fn objectCamera(l: *Lua) i32 {
 pub fn objectGc(l: *Lua) i32 {
     const obj = l.checkUserdata(Object, 1, "Object");
     switch (obj.data) {
-        .mesh => |*m| lua_mesh.gc(l, m, allocator),
+        .mesh_data => |*m| lua_mesh.gc(l, m, allocator),
         .image => |*i| lua_image.gc(l, i, allocator),
         .camera => |*c| lua_camera.gc(l, c, allocator),
     }

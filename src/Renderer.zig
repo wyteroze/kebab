@@ -6,8 +6,8 @@ const sdl3 = @import("sdl3");
 const log       = @import("log.zig").render;
 const math      = @import("math.zig");
 const types     = @import("types.zig");
-const Mesh      = @import("Mesh.zig").Mesh;
-const Sprite    = @import("Sprite.zig").Sprite;
+const MeshData      = @import("MeshData.zig").MeshData;
+const ImageData    = @import("ImageData.zig").ImageData;
 const Camera    = @import("Camera.zig").Camera;
 const Scene     = @import("Scene.zig").Scene;
 const Object    = @import("object.zig").Object;
@@ -100,8 +100,8 @@ pub const Renderer = struct {
 
         for (scene.objects.items) |obj| {
             switch (obj.data) {
-                .mesh => |m| {
-                    try self.drawMesh(m.mesh, m.texture, &obj.transform, scene.camera);
+                .mesh_data => |m| {
+                    try self.drawMesh(m.mesh_data, m.texture, &obj.transform, scene.camera);
                 },
                 .image => |i| {
                     log.warn("standalone image rendering is not supported yet", .{});
@@ -112,7 +112,7 @@ pub const Renderer = struct {
         }
     }
 
-    pub fn drawMesh(self: *Renderer, mesh: *const Mesh, texture: ?*const Sprite, transform: *const Transform, cam: ?*Camera) !void {
+    pub fn drawMesh(self: *Renderer, mesh_data: *const MeshData, texture: ?*const ImageData, transform: *const Transform, cam: ?*Camera) !void {
         const aspect_ratio = @as(f32, @floatFromInt(self.size.x)) / @as(f32, @floatFromInt(self.size.y));
         const camera = cam orelse self.default_camera;
 
@@ -157,13 +157,13 @@ pub const Renderer = struct {
         };
 
         self.tri_buffer.clearRetainingCapacity();
-        for (mesh.faces) |*face| {
+        for (mesh_data.faces) |*face| {
             var i = @as(usize, 0);
 
             while (i < face.length) : (i += 3) {
-                const ia = mesh.vertices[mesh.indices[face.start + i]];
-                const ib = mesh.vertices[mesh.indices[face.start + i + 1]];
-                const ic = mesh.vertices[mesh.indices[face.start + i + 2]];
+                const ia = mesh_data.vertices[mesh_data.indices[face.start + i]];
+                const ib = mesh_data.vertices[mesh_data.indices[face.start + i + 1]];
+                const ic = mesh_data.vertices[mesh_data.indices[face.start + i + 2]];
 
                 const va = math.multiplyMatrixVector(world_matrix, ia.position);
                 const vb = math.multiplyMatrixVector(world_matrix, ib.position);
@@ -496,7 +496,7 @@ pub const Renderer = struct {
     }
 
     // I'm sorry
-    pub fn drawTexturedTriangle(self: *Renderer, tri: Triangle, sprite: Sprite) void {
+    pub fn drawTexturedTriangle(self: *Renderer, tri: Triangle, img_data: ImageData) void {
         var pa = tri.pa;
         var pb = tri.pb;
         var pc = tri.pc;
@@ -592,7 +592,7 @@ pub const Renderer = struct {
                     const idx = @as(usize, @intCast(i)) * @as(usize, @intCast(self.size.x)) + @as(usize, @intCast(j));
                     if (idx >= self.depthbuffer.len) continue;
                     if (tex_w > self.depthbuffer[idx]) {
-                        self.drawPoint(@floatFromInt(j), @floatFromInt(i), sprite.sample(tex_u / tex_w, tex_v / tex_w));
+                        self.drawPoint(@floatFromInt(j), @floatFromInt(i), img_data.sample(tex_u / tex_w, tex_v / tex_w));
                        self.depthbuffer[idx] = tex_w;
                     }
 
@@ -654,7 +654,7 @@ pub const Renderer = struct {
                     const idx = @as(usize, @intCast(i)) * @as(usize, @intCast(self.size.x)) + @as(usize, @intCast(j));
                     if (idx >= self.depthbuffer.len) continue;
                     if (tex_w > self.depthbuffer[idx]) {
-                        self.drawPoint(@floatFromInt(j), @floatFromInt(i), sprite.sample(tex_u / tex_w, tex_v / tex_w));
+                        self.drawPoint(@floatFromInt(j), @floatFromInt(i), img_data.sample(tex_u / tex_w, tex_v / tex_w));
                        self.depthbuffer[idx] = tex_w;
                     }
 

@@ -3,21 +3,21 @@
 const std = @import("std");
 const types = @import("types.zig");
 
-const Mesh = @import("Mesh.zig").Mesh;
-const Sprite = @import("Sprite.zig").Sprite;
+const MeshData = @import("MeshData.zig").MeshData;
+const ImageData = @import("ImageData.zig").ImageData;
 const Camera = @import("Camera.zig").Camera;
-pub const ObjectKind = enum { mesh, image, camera };
+pub const ObjectKind = enum { mesh_data, image, camera };
 
 pub const Object = struct {
     transform: types.Transform,
     data: union(ObjectKind) {
-        mesh: MeshObject,
+        mesh_data: MeshObject,
         image: ImageObject,
         camera: CameraObject,
 
         pub fn luaName(self: @This()) []const u8 {
             return switch (self) {
-                .mesh => "Mesh",
+                .mesh_data => "MeshData",
                 .image => "Image",
                 .camera => "Camera"
             };
@@ -26,14 +26,14 @@ pub const Object = struct {
 };
 
 pub const MeshObject = struct {
-    mesh: *const Mesh,
-    texture: ?*const Sprite,
+    mesh_data: *const MeshData,
+    texture: ?*const ImageData,
     mesh_ref: i32,
     texture_ref: ?i32 = null
 };
 
 pub const ImageObject = struct {
-    image: *const Sprite,
+    image: *const ImageData,
     image_ref: i32,
 };
 

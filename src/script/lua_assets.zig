@@ -4,8 +4,8 @@ const std = @import("std");
 const zlua = @import("zlua");
 const shared = @import("shared/shared.zig");
 const types = @import("../types.zig");
-const Mesh = @import("../Mesh.zig").Mesh;
-const Sprite = @import("../Sprite.zig").Sprite;
+const MeshData = @import("../MeshData.zig").MeshData;
+const ImageData = @import("../ImageData.zig").ImageData;
 const Lua = zlua.Lua;
 var allocator: std.mem.Allocator = undefined;
 var io: std.Io = undefined;
@@ -19,15 +19,15 @@ const assets_lib = [_]zlua.FnReg {
 
 pub fn loadMesh(l: *Lua) i32 {
     const path = l.checkString(1);
-    const mesh = l.newUserdata(Mesh, 0);
+    const mesh_data = l.newUserdata(MeshData, 0);
     const full_path = std.mem.concat(allocator, u8, &.{ mesh_path, path }) catch |e| {
         l.raiseErrorStr("failed to form full path from '%s': '%s'", .{ path.ptr, @errorName(e).ptr });
         return 0;
     };
     defer allocator.free(full_path);
 
-    mesh.* = Mesh.loadFromFile(allocator, io, full_path) catch |e| {
-        l.raiseErrorStr("failed to load mesh '%s': '%s'", .{ full_path.ptr, @errorName(e).ptr });
+    mesh_data.* = MeshData.loadFromFile(allocator, io, full_path) catch |e| {
+        l.raiseErrorStr("failed to load mesh_data '%s': '%s'", .{ full_path.ptr, @errorName(e).ptr });
         return 0;
     };
 
@@ -37,14 +37,14 @@ pub fn loadMesh(l: *Lua) i32 {
 
 pub fn loadImage(l: *Lua) i32 {
     const path = l.checkString(1);
-    const sprite = l.newUserdata(Sprite, 0);
+    const img_data = l.newUserdata(ImageData, 0);
     const full_path = std.mem.concat(allocator, u8, &.{ image_path, path }) catch |e| {
         l.raiseErrorStr("failed to form full path from '%s': '%s'", .{ path.ptr, @errorName(e).ptr });
         return 0;
     };
     defer allocator.free(full_path);
 
-    sprite.* = Sprite.loadFromFile(allocator, io, full_path) catch |e| {
+    img_data.* = ImageData.loadFromFile(allocator, io, full_path) catch |e| {
         l.raiseErrorStr("failed to load image '%s': '%s'", .{ full_path.ptr, @errorName(e).ptr });
         return 0;
     };
@@ -54,14 +54,14 @@ pub fn loadImage(l: *Lua) i32 {
 }
 
 fn meshDataGc(l: *Lua) i32 {
-    const mesh = l.checkUserdata(Mesh, 1, "MeshData");
-    mesh.deinit();
+    const mesh_data = l.checkUserdata(MeshData, 1, "MeshData");
+    mesh_data.deinit();
     return 0;
 }
 
 fn imageDataGc(l: *Lua) i32 {
-    const sprite = l.checkUserdata(Sprite, 1, "ImageData");
-    sprite.deinit(allocator);
+    const img_data = l.checkUserdata(ImageData, 1, "ImageData");
+    img_data.deinit(allocator);
     return 0;
 }
 

@@ -8,8 +8,8 @@ const types         = @import("types.zig");
 const log           = @import("log.zig").engine;
 const Platform      = @import("Platform.zig").Platform;
 const Renderer      = @import("Renderer.zig").Renderer;
-const Mesh          = @import("Mesh.zig").Mesh;
-const Sprite        = @import("Sprite.zig").Sprite;
+const MeshData          = @import("MeshData.zig").MeshData;
+const ImageData        = @import("ImageData.zig").ImageData;
 const Camera        = @import("Camera.zig").Camera;
 const Object        = @import("object.zig").Object;
 const ScriptEngine  = @import("script/ScriptEngine.zig").ScriptEngine;
@@ -46,7 +46,7 @@ pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
     const io = init.io;
 
-    scene.skybox_mesh = try Mesh.loadFromFile(allocator, io, "src/assets/models/skybox.obj");
+    scene.skybox_mesh = try MeshData.loadFromFile(allocator, io, "src/assets/models/skybox.obj");
 
     var platform = try Platform.init();
     defer platform.deinit();
@@ -80,7 +80,7 @@ pub fn main(init: std.process.Init) !void {
             switch (e) {
                 .quit => running = false,
 
-                else => scriptEngine.handleInput(e)
+                else => { } //scriptEngine.handleInput(e)
             }
         }
 

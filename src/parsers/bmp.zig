@@ -2,7 +2,7 @@
 const std = @import("std");
 const types = @import("../types.zig");
 const log = @import("../log.zig").bmp;
-const Sprite = @import("../Sprite.zig").Sprite;
+const ImageData = @import("../ImageData.zig").ImageData;
 
 pub const ParseError = error{
     InvalidMagic,
@@ -14,7 +14,7 @@ pub const ParseError = error{
 };
 
 /// VERY simple. Does not support indexed color, compression, non-standard dib headers.
-pub fn parseBmp(allocator: std.mem.Allocator, reader: *std.Io.Reader) !Sprite {
+pub fn parseBmp(allocator: std.mem.Allocator, reader: *std.Io.Reader) !ImageData {
     var file_header: [14]u8 = undefined;
     reader.readSliceAll(&file_header)
         catch return ParseError.UnexpectedEof;
@@ -108,7 +108,7 @@ pub fn parseBmp(allocator: std.mem.Allocator, reader: *std.Io.Reader) !Sprite {
     }
 
     log.info("parsed bmp: {d}x{d}, {d}bpp", .{ img_width, img_height, bpp });
-    return Sprite{
+    return ImageData{
         .allocator = allocator,
         .width  = img_width,
         .height = img_height,

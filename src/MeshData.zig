@@ -3,26 +3,26 @@
 const std = @import("std");
 const types = @import("types.zig");
 const obj_parser = @import("parsers/obj.zig");
-const Sprite = @import("Sprite.zig").Sprite;
+const ImageData = @import("ImageData.zig").ImageData;
 
 const Vec3_SIMD = types.Vec3_SIMD;
 const Vertex = types.Vertex;
 const Face = types.Face;
 
-pub const Mesh = struct {
+pub const MeshData = struct {
     allocator: std.mem.Allocator,
     vertices: []Vertex,
     indices: []usize,
     faces: []types.Face,
-    texture: ?*Sprite,
+    texture: ?*ImageData,
 
     pub fn init(
         allocator: std.mem.Allocator,
         vertices: []const Vertex,
         indices: []const usize,
         faces: []const Face,
-        texture: ?*Sprite
-    ) !Mesh {
+        texture: ?*ImageData
+    ) !MeshData {
         const v = try allocator.dupe(Vertex, vertices);
         errdefer allocator.free(v);
 
@@ -41,7 +41,7 @@ pub const Mesh = struct {
         };
     }
 
-    pub fn loadFromFile(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !Mesh {
+    pub fn loadFromFile(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !MeshData {
         var file = try std.Io.Dir.cwd().openFile(io, path, .{});
         defer file.close(io);
 
@@ -50,11 +50,11 @@ pub const Mesh = struct {
         var file_reader = file.reader(io, &buffer);
         const reader = &file_reader.interface;
 
-        const mesh = try obj_parser.parseObj(allocator, reader);
-        return mesh;
+        const mesh_data = try obj_parser.parseObj(allocator, reader);
+        return mesh_data;
     }
 
-    pub fn deinit(self: Mesh) void {
+    pub fn deinit(self: MeshData) void {
         self.allocator.free(self.vertices);
         self.allocator.free(self.indices);
         self.allocator.free(self.faces);

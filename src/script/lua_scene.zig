@@ -6,7 +6,7 @@ const log = @import("../log.zig").lua;
 const Scene = @import("../Scene.zig").Scene;
 const SceneRegistry = @import("../SceneRegistry.zig").SceneRegistry;
 const Object = @import("../object.zig").Object;
-const Sprite = @import("../Sprite.zig").Sprite;
+const ImageData = @import("../ImageData.zig").ImageData;
 const ref = @import("shared/ref.zig");
 const Signal = @import("shared/Signal.zig");
 const Lua = zlua.Lua;
@@ -191,7 +191,7 @@ pub fn sceneNewIndex(l: *Lua) i32 {
 
         return 0;
     } else if (std.mem.eql(u8, key, "SkyboxTexture")) {
-        const obj = l.checkUserdata(Sprite, 3, "ImageData");
+        const obj = l.checkUserdata(ImageData, 3, "ImageData");
         self.ptr.skybox.texture = obj;
 
         if (self.skybox_texture_ref) |r| {

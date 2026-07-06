@@ -6,7 +6,7 @@ const types = @import("../../types.zig");
 const Lua = zlua.Lua;
 const object = @import("../../object.zig");
 
-const Sprite = @import("../../Sprite.zig").Sprite;
+const ImageData = @import("../../ImageData.zig").ImageData;
 
 pub fn index(_: *Lua, _: *object.ImageObject, _: []const u8) ?i32 { return null; }
 
@@ -17,7 +17,7 @@ pub fn gc(l: *Lua, i: *object.ImageObject, _: std.mem.Allocator) void {
 }
 
 pub fn construct(l: *Lua, obj: *object.Object, _: std.mem.Allocator) i32 {
-    const image_data = l.checkUserdata(Sprite, 1, "ImageData");
+    const image_data = l.checkUserdata(ImageData, 1, "ImageData");
     l.pushValue(1);
 
     const image_ref = l.ref(zlua.registry_index);

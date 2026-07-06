@@ -9,8 +9,8 @@ const Face = types.Face;
 
 const Object = @import("object.zig").Object;
 const Camera = @import("Camera.zig").Camera;
-const Mesh = @import("Mesh.zig").Mesh;
-pub var skybox_mesh: ?Mesh = null;
+const MeshData = @import("MeshData.zig").MeshData;
+pub var skybox_mesh: ?MeshData = null;
 
 pub const UpdateCallback = struct {
     ctx: ?*anyopaque,
@@ -23,7 +23,7 @@ pub const Scene = struct {
     name: ?[]const u8,
     callbacks: std.ArrayList(UpdateCallback),
     camera: ?*Camera,
-    skybox: Mesh,
+    skybox: MeshData,
 
     pub fn init(allocator: std.mem.Allocator, name: ?[]const u8, camera: ?*Camera) !Scene {
         return .{

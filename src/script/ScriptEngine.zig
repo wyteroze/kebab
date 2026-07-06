@@ -6,12 +6,8 @@ const zlua = @import("zlua");
 const Lua = zlua.Lua;
 
 const log = @import("../log.zig").script;
-const lua_vec = @import("lua_vec.zig");
-const lua_log = @import("lua_log.zig");
-const lua_scene = @import("lua_scene.zig");
-const lua_object = @import("lua_object.zig");
-const lua_assets = @import("lua_assets.zig");
-const lua_input = @import("lua_input.zig");
+const libs = @import("libs/libs.zig");
+const reflect = @import("reflect/reflect.zig");
 
 const SceneRegistry = @import("../SceneRegistry.zig").SceneRegistry;
 
@@ -22,12 +18,10 @@ pub const ScriptEngine = struct {
         var lua = try Lua.init(allocator);
         lua.openLibs();
 
-        try lua_vec.register(lua);
-        try lua_log.register(lua, allocator);
-        try lua_scene.register(lua, allocator, sceneRegistry);
-        try lua_object.register(lua, allocator);
-        try lua_assets.register(lua, allocator, io);
-        try lua_input.register(lua, allocator, window);
+        _ = io;
+        _ = sceneRegistry;
+        _ = window;
+        //try reflect.registerAll(lua, libs, .{ allocator, io, sceneRegistry, window });
 
         return .{
             .lua = lua
@@ -63,78 +57,7 @@ pub const ScriptEngine = struct {
         };
     }
 
-    pub fn fireInputBegin(
-        _: *ScriptEngine,
-        code: lua_input.InputCode,
-        value: lua_input.InputValue,
-        user_index: i32
-    ) void {
-        lua_input.fireBegin(code, value, user_index);
-    }
-
-    pub fn fireInputEnd(
-        _: *ScriptEngine,
-        code: lua_input.InputCode,
-        user_index: i32
-    ) void {
-        lua_input.fireEnd(code, user_index);
-    }
-
-    pub fn fireInputChange(
-        _: *ScriptEngine,
-        code: lua_input.InputCode,
-        value: lua_input.InputValue,
-        delta: lua_input.InputValue,
-        user_index: i32
-    ) void {
-        lua_input.fireChange(code, value, delta, user_index);
-    }
-
-    pub fn handleInput(_: *ScriptEngine, event: sdl3.events.Event) void {
-        switch (event) {
-            .key_down => |k| if (!k.repeat) {
-                if (lua_input.fromSdlKeyCode(k.key)) |code| {
-                    lua_input.fireBegin(code, .{ .scalar = 1 }, 1);
-                }
-            },
-            .key_up => |k| {
-                if (lua_input.fromSdlKeyCode(k.key)) |code| {
-                    lua_input.fireEnd(code, 1);
-                }
-            },
-            .mouse_button_down => |m| {
-                if (lua_input.fromMouseButton(m.button)) |code| {
-                    lua_input.fireBegin(code, .{ .scalar = 1 }, 1);
-                }
-            },
-            .mouse_button_up => |m| {
-                if (lua_input.fromMouseButton(m.button)) |code| {
-                    lua_input.fireEnd(code, 1);
-                }
-            },
-            .mouse_motion => |m| {
-                lua_input.fireChange(
-                    .MouseMove,
-                    .{ .vec2 = .{ m.x, m.y } },
-                    .{ .vec2 = .{ m.x_rel, m.y_rel } },
-                    1,
-                );
-            },
-            .mouse_wheel => |m| {
-                lua_input.fireChange(
-                    .MouseScroll,
-                    .{ .vec2 = .{ m.scroll_x, m.scroll_y } },
-                    .{ .vec2 = .{ m.scroll_x, m.scroll_y } },
-                    1,
-                );
-            },
-
-            else => {}
-        }
-    }
-
     pub fn deinit(self: *ScriptEngine) void {
-        lua_input.deinit(self.lua);
         self.lua.deinit();
     }
 };

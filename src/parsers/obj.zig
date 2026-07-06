@@ -3,7 +3,7 @@
 const std = @import("std");
 const types = @import("../types.zig");
 const log = @import("../log.zig").obj;
-const Mesh = @import("../Mesh.zig").Mesh;
+const MeshData = @import("../MeshData.zig").MeshData;
 
 const Vec2_SIMD = types.Vec2_SIMD;
 const Vec3_SIMD = types.Vec3_SIMD;
@@ -17,7 +17,7 @@ pub const ParseError = error{
     InvalidInt
 };
 
-pub fn parseObj(allocator: std.mem.Allocator, reader: *std.Io.Reader) !Mesh {
+pub fn parseObj(allocator: std.mem.Allocator, reader: *std.Io.Reader) !MeshData {
     log.debug("parsing obj", .{});
 
     var raw_positions = std.ArrayList(Vec3_SIMD).empty;
@@ -55,7 +55,7 @@ pub fn parseObj(allocator: std.mem.Allocator, reader: *std.Io.Reader) !Mesh {
     }
 
     log.info("parsed obj: {d} vertices, {d} faces", .{ vertices.items.len, faces.items.len });
-    return Mesh.init(
+    return MeshData.init(
         allocator,
         vertices.items,
         indices.items,
