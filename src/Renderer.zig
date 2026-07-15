@@ -6,14 +6,14 @@ const sdl3 = @import("sdl3");
 const log       = @import("log.zig").render;
 const math      = @import("math.zig");
 const types     = @import("types.zig");
-const MeshData      = @import("MeshData.zig").MeshData;
-const ImageData    = @import("ImageData.zig").ImageData;
+const MeshData  = @import("MeshData.zig").MeshData;
+const ImageData = @import("ImageData.zig").ImageData;
 const Camera    = @import("Camera.zig").Camera;
 const Scene     = @import("Scene.zig").Scene;
 const Object    = @import("object.zig").Object;
 
-const Mat4 = types.Mat4;
-const Vertex = types.Vertex;
+const Mat4      = types.Mat4;
+const Vertex    = types.Vertex;
 const Triangle  = types.Triangle;
 const Transform = types.Transform;
 const Vec2_SIMD = types.Vec2_SIMD;
@@ -147,7 +147,7 @@ pub const Renderer = struct {
     }
 
     pub fn drawMesh(self: *Renderer, mesh_data: *const MeshData, texture: ?*const ImageData, transform: *const Transform, cam: ?*Camera) !void {
-        const aspect_ratio = @as(f32, @floatFromInt(self.size.x)) / @as(f32, @floatFromInt(self.size.y));
+        const aspect_ratio = @as(f32, @floatFromInt(self.size.y)) / @as(f32, @floatFromInt(self.size.x));
         const camera = cam orelse self.default_camera;
 
         const camera_transform = camera.transform;
@@ -451,82 +451,6 @@ pub const Renderer = struct {
         self.drawLine(p0, p1, color);
         self.drawLine(p1, p2, color);
         self.drawLine(p2, p0, color);
-    }
-
-    pub fn visualizeAxes(self: *Renderer, cam: ?*Camera) void {
-        const camera = cam orelse self.default_camera;
-        const projection_matrix = camera.getProjectionMatrix();
-        const view_matrix = camera.getViewMatrix();
-
-        const sx = 0.5 * @as(f32, @floatFromInt(self.size.x));
-        const sy = 0.5 * @as(f32, @floatFromInt(self.size.y));
-
-        // this changes the axis line length
-        const axis_length = @as(f32, 2.0);
-
-        // axes in world space
-        const world_origin = Vec3_SIMD{ 0.0, 0.0, 0.0 };
-        const world_x = Vec3_SIMD{ axis_length, 0.0, 0.0 };
-        const world_y = Vec3_SIMD{ 0.0, axis_length, 0.0 };
-        const world_z = Vec3_SIMD{ 0.0, 0.0, axis_length };
-
-        // view space
-        const view_origin = math.multiplyMatrixVector(view_matrix, world_origin);
-        const view_x = math.multiplyMatrixVector(view_matrix, world_x);
-        const view_y = math.multiplyMatrixVector(view_matrix, world_y);
-        const view_z = math.multiplyMatrixVector(view_matrix, world_z);
-
-        const LineClipper = struct {
-            fn drawClippedLine(
-                r: *Renderer,
-                p0_view: Vec3_SIMD,
-                p1_view: Vec3_SIMD,
-                proj: Mat4,
-                scale_x: f32,
-                scale_y: f32,
-                color: u32
-            ) void {
-                const near_z = 0.1;
-                const d0 = p0_view[2] - near_z;
-                const d1 = p1_view[2] - near_z;
-
-                var start = p0_view;
-                var end = p1_view;
-
-                // it's behind plane, discard
-                if (d0 < 0.0 and d1 < 0.0) return;
-
-                if (d0 < 0.0) { // clip start point if behind near plane
-                    start = math.vectorIntersectPlane(
-                        Vec3_SIMD{ 0.0, 0.0, near_z },
-                        Vec3_SIMD{ 0.0, 0.0, 1.0 },
-                        p0_view,
-                        p1_view
-                    ).intersect;
-                } else if (d1 < 0.0) { // clip end point if behind near plane
-                    end = math.vectorIntersectPlane(
-                        Vec3_SIMD{ 0.0, 0.0, near_z },
-                        Vec3_SIMD{ 0.0, 0.0, 1.0 },
-                        p0_view,
-                        p1_view
-                    ).intersect;
-                }
-
-                const proj_start = math.multiplyMatrixVector(proj, start);
-                const proj_end   = math.multiplyMatrixVector(proj, end);
-
-                // map to screen space
-                const screen_start = Vec3_SIMD{ (proj_start[0] + 1.0) * scale_x, (1.0 - proj_start[1]) * scale_y, 0.0 };
-                const screen_end   = Vec3_SIMD{ (proj_end[0] + 1.0) * scale_x,   (1.0 - proj_end[1]) * scale_y,   0.0 };
-
-                r.drawLine(screen_start, screen_end, color);
-            }
-        };
-
-        // draw
-        LineClipper.drawClippedLine(self, view_origin, view_x, projection_matrix, sx, sy, 0xFF_FF_00_00); // x = red
-        LineClipper.drawClippedLine(self, view_origin, view_y, projection_matrix, sx, sy, 0xFF_00_FF_00); // y = green
-        LineClipper.drawClippedLine(self, view_origin, view_z, projection_matrix, sx, sy, 0xFF_00_00_FF); // z = blue
     }
 
     // I'm sorry

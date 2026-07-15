@@ -109,8 +109,8 @@ pub fn multiplyMatrices(a: Mat4, b: Mat4) Mat4 {
 
 pub fn pointAt(pos: Vec3_SIMD, target: Vec3_SIMD, up: Vec3_SIMD) Mat4 {
     const forward_dir = normalize(target - pos);
-    const up_dir = up - (forward_dir * @as(Vec3_SIMD, @splat(dot(up, forward_dir))));
-    const right_dir = cross(up_dir, forward_dir);
+    const up_dir = normalize(up - (forward_dir * @as(Vec3_SIMD, @splat(dot(up, forward_dir)))));
+    const right_dir = normalize(cross(up_dir, forward_dir));
 
     const matrix = Mat4{ .rows = .{
         Vec4_SIMD{ right_dir[0],    right_dir[1],   right_dir[2],   0 },
