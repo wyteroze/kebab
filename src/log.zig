@@ -30,6 +30,7 @@ pub const toml      = Tagged(.parse, "toml");
 // Engine
 pub const engine    = std.log.scoped(.engine);
 pub const config    = Tagged(.engine, "config");
+pub const threading = Tagged(.engine, "threading");
 
 // UI
 pub const ui        = std.log.scoped(.ui);

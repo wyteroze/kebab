@@ -14,14 +14,16 @@ const Camera        = @import("Camera.zig").Camera;
 const Object        = @import("object.zig").Object;
 const ScriptEngine  = @import("script/ScriptEngine.zig").ScriptEngine;
 const SceneRegistry = @import("SceneRegistry.zig").SceneRegistry;
-const WidgetRegistry = @import("WidgetRegistry.zig").WidgetRegistry;
+const WidgetRegistry= @import("WidgetRegistry.zig").WidgetRegistry;
 const ColorRegistry = @import("ColorRegistry.zig").ColorRegistry;
+const ThreadRegistry= @import("ThreadRegistry.zig").ThreadRegistry;
 const InputLib      = @import("script/libs/InputLib.zig");
 const AudioEngine   = @import("audio/AudioEngine.zig").AudioEngine;
 const Config        = @import("Config.zig").Config;
 const Color         = @import("Color.zig").Color;
 const Font          = @import("ui/Font.zig").Font;
 const scene         = @import("Scene.zig");
+const perf          = @import("profile/perf.zig");
 
 const config_path = "config.toml";
 
@@ -48,6 +50,13 @@ pub fn main(init: std.process.Init) !void {
     log.info("Initializing...", .{});
     const allocator = init.gpa;
     const io = init.io;
+
+    var threadRegistry = ThreadRegistry.init(io);
+    defer threadRegistry.deinit();
+
+    perf.registry = &threadRegistry;
+    perf.frequency = sdl3.timer.getPerformanceFrequency();
+    perf.enabled = true;
 
     const config = try Config.load(allocator, io, config_path);
 
@@ -97,40 +106,60 @@ pub fn main(init: std.process.Init) !void {
         const dt = @as(f32, @floatFromInt(currentTime - lastTimeMs)) / frequency;
         lastTimeMs = currentTime;
 
-        // events
-        while (sdl3.events.poll()) |e| {
-            switch (e) {
-                .quit => running = false,
+        try perf.beginFrame("main"); {
+            // events
+            perf.start("events"); {
+                while (sdl3.events.poll()) |e| {
+                    switch (e) {
+                        .quit => running = false,
 
-                else => if (InputLib.current) |c| c.dispatch(e)
-            }
-        }
+                        else => if (InputLib.current) |c| c.dispatch(e)
+                    }
+                }
+            } perf.stop();
 
-        // rendering
-        renderer.drawBackground();
+            // rendering
+            perf.start("clear"); {
+                renderer.drawBackground();
+            } perf.stop();
 
-        // render scene
-        const current_scene = sceneRegistry.current_scene;
-        if (current_scene) |s| {
-            s.update(dt);
+            // render scene
+            perf.start("scene"); {
+                const current_scene = sceneRegistry.current_scene;
+                if (current_scene) |s| {
+                    perf.start("update"); {
+                        s.update(dt);
+                    } perf.stop();
 
-            try audioEngine.tick(s);
-            try renderer.drawScene(s);
-        }
+                    perf.start("audio"); {
+                        try audioEngine.tick(s);
+                    } perf.stop();
+                    perf.start("draw"); {
+                        try renderer.drawScene(s);
+                    } perf.stop();
+                }
+            } perf.stop();
 
-        // render ui
-        renderer.drawRect(0, 0, 64, 64, 0x80000000);
-        renderer.drawText(font, 0, 0, "Hello, world!", 0xFFFFFFFF);
+            // render ui
+            perf.start("ui"); {
+                renderer.drawRect(0, 0, 64, 64, 0x80000000);
+                renderer.drawText(font, 0, 0, "Hello, world!", 0xFFFFFFFF);
+            } perf.stop();
 
-        // submit
-        try renderer.present();
+            // submit
+            perf.start("present"); {
+                try renderer.present();
+            } perf.stop();
+        } perf.endFrame();
+
+        perf.dumpToLog();
 
         // frame limiter
-        const fps_ms = config.fps / 1000;
+        const fps_ms: f32 = 1000.0 / @as(f32, @floatFromInt(config.fps));
         const frameTime = sdl3.timer.getPerformanceCounter() - currentTime;
-        const frameTimeMs = (frameTime * 1000) / @as(u64, @intFromFloat(frequency));
+        const frameTimeMs: f32 = @as(f32, @floatFromInt(frameTime)) * 1000.0 / frequency;
         if (frameTimeMs < fps_ms) {
-            sdl3.timer.delayMilliseconds(@intCast(fps_ms - frameTimeMs));
+            sdl3.timer.delayMilliseconds(@intFromFloat(fps_ms - frameTimeMs));
         }
     }
 }

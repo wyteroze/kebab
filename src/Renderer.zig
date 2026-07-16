@@ -16,6 +16,7 @@ const Camera    = @import("Camera.zig").Camera;
 const Scene     = @import("Scene.zig").Scene;
 const Object    = @import("object.zig").Object;
 const Font      = @import("ui/Font.zig").Font;
+const perf      = @import("profile/perf.zig");
 
 const Mat4      = types.Mat4;
 const Vertex    = types.Vertex;
@@ -79,8 +80,13 @@ pub const Renderer = struct {
     }
 
     pub fn present(self: Renderer) !void {
-        try self.canvas.blitScaled(null, self.window_surface, null, .nearest);
-        try self.window.updateSurface();
+        perf.start("blit"); {
+            try self.canvas.blitScaled(null, self.window_surface, null, .nearest);
+        } perf.stop();
+
+        perf.start("copy"); {
+            try self.window.updateSurface();
+        } perf.stop();
     }
 
 
@@ -104,10 +110,14 @@ pub const Renderer = struct {
             const cam = if (scene.camera) |obj| obj.data.camera.camera else null;
             const skybox_pos = if (cam) |c| &c.transform.onlyPosition() else &Transform.identity();
 
-            try self.drawMesh(&scene.skybox, scene.skybox.texture, skybox_pos, cam);
+            perf.start("draw skybox"); {
+                try self.drawMesh(&scene.skybox, scene.skybox.texture, skybox_pos, cam);
+            } perf.stop();
         }
 
         for (scene.objects.items) |obj| {
+            perf.start("draw object");
+
             switch (obj.data) {
                 .mesh => |m| {
                     const cam = if (scene.camera) |o| o.data.camera.camera else null;
@@ -119,6 +129,8 @@ pub const Renderer = struct {
                 },
                 else => {}
             }
+
+            perf.stop();
         }
     }
 
@@ -167,6 +179,7 @@ pub const Renderer = struct {
         };
 
         self.tri_buffer.clearRetainingCapacity();
+        perf.start("process faces");
         for (mesh_data.faces) |*face| {
             var i = @as(usize, 0);
 
@@ -266,7 +279,7 @@ pub const Renderer = struct {
                 }
             }
         }
-
+        perf.stop();
 
         const f_width  = @as(f32, @floatFromInt(self.size.x));
         const f_height = @as(f32, @floatFromInt(self.size.y));
@@ -278,6 +291,7 @@ pub const Renderer = struct {
             .{ .point = .{ f_width, 0.0,    0.0 }, .normal = .{ -1.0,  0.0, 0.0 } }, // right
         };
 
+        perf.start("raster tris");
         for (self.tri_buffer.items) |tri| {
             self.tri_raster_list.clearRetainingCapacity();
             try self.tri_raster_list.append(self.allocator, tri);
@@ -317,6 +331,7 @@ pub const Renderer = struct {
                 }
             }
         }
+        perf.stop();
     }
 
     inline fn drawPoint(self: *Renderer, x: f32, y: f32, color: ?u32) void {
