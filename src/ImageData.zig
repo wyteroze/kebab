@@ -41,4 +41,11 @@ pub const ImageData = struct {
 
         return self.pixels[y * self.width + x];
     }
+
+    pub fn samplePixel(self: ImageData, px: u32, py: u32) u32 {
+        const cx = std.math.clamp(px, 0, self.width);
+        const cy = std.math.clamp(py, 0, self.height);
+
+        return self.pixels[cy * self.width + cx];
+    }
 };

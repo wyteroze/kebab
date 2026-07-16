@@ -65,6 +65,17 @@ pub fn push(l: *Lua, value: anytype) void {
     }
 }
 
+fn pushReturn(l: *Lua, value: anytype) i32 {
+    const info = @typeInfo(@TypeOf(value));
+    if (info == .@"struct" and info.@"struct".is_tuple) {
+        inline for (0..info.@"struct".fields.len) |i| push(l, value[i]);
+        return @intCast(info.@"struct".fields.len);
+    }
+
+    push(l, value);
+    return 1;
+}
+
 pub fn check(l: *Lua, comptime T: type, idx: i32) !T {
     const starting_stack = l.getTop();
     defer { if (l.getTop() != starting_stack) @panic("unbalanced stack"); }
@@ -88,7 +99,7 @@ pub fn check(l: *Lua, comptime T: type, idx: i32) !T {
             @compileError("non-string pointers not supported");
         },
         .optional => |o| {
-            if (l.isNil(idx)) return null;
+            if (l.isNoneOrNil(idx)) return null;
             return try check(l, o.child, idx);
         },
         .@"enum" => |e| {
@@ -167,8 +178,7 @@ pub fn wrapFunc(comptime func: anytype) fn (*Lua) i32 {
                 if (result) |r| {
                     if (Payload == void)  return 0;
 
-                    push(l, r);
-                    return 1;
+                    return pushReturn(l, r);
                 } else |e| {
                     if (@hasField(Self, "diagnostic")) {
                         const self = switch (@typeInfo(params[0].type.?)) {
@@ -185,8 +195,8 @@ pub fn wrapFunc(comptime func: anytype) fn (*Lua) i32 {
                 }
             }
 
-            if (Payload != void) push(l, result);
-            return (if (Payload == void) 0 else 1);
+            if (Payload == void) return 0;
+            return pushReturn(l, result);
         }
     }.c;
 }
@@ -234,8 +244,7 @@ pub fn wrapModuleFunc(comptime Lib: type, comptime func: anytype) fn (*Lua) i32 
                 if (result) |r| {
                     if (Payload == void)  return 0;
 
-                    push(l, r);
-                    return 1;
+                    return pushReturn(l, r);
                 } else |e| {
                     if (@hasField(Self, "diagnostic")) {
                         l.raiseErrorStr("%s", .{ self_ptr.diagnostic.message.ptr });
@@ -247,8 +256,8 @@ pub fn wrapModuleFunc(comptime Lib: type, comptime func: anytype) fn (*Lua) i32 
                 }
             }
 
-            if (Payload != void) push(l, result);
-            return (if (Payload == void) 0 else 1);
+            if (Payload == void) return 0;
+            return pushReturn(l, result);
         }
     }.c;
 }

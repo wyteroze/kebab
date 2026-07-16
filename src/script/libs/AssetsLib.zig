@@ -6,11 +6,13 @@ const Diagnostic = @import("../shared.zig").Diagnostic;
 const MeshData = @import("../../MeshData.zig").MeshData;
 const ImageData = @import("../../ImageData.zig").ImageData;
 const AudioData = @import("../../audio/AudioData.zig").AudioData;
+const Font = @import("../../ui/Font.zig").Font;
 const marshal = @import("../reflect/marshal.zig");
 
 const mesh_path = "src/assets/models/";
 const image_path = "src/assets/images/";
 const audio_path = "src/assets/audios/";
+const font_path = "src/assets/fonts/";
 
 pub const AssetsLib = struct {
     pub const name = "Assets";
@@ -53,5 +55,18 @@ pub const AssetsLib = struct {
             self.diagnostic.set("failed to load sound from '{s}': {s}", .{ full_path, @errorName(e) });
             return e;
         };
+    }
+
+    /// `name` is a folder under src/assets/fonts/ containing map.toml and the character sheet.
+    pub fn loadFont(self: *AssetsLib, font_name: []const u8) !marshal.Handle(Font) {
+        const folder = try std.mem.concat(self.allocator, u8, &.{ font_path, font_name, "/" });
+        defer self.allocator.free(folder);
+
+        const font = Font.loadFromFile(marshal.ref_allocator, self.io, folder) catch |e| {
+            self.diagnostic.set("failed to load font '{s}': {s}", .{ font_name, @errorName(e) });
+            return e;
+        };
+
+        return .{ .ptr = font };
     }
 };

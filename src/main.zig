@@ -14,9 +14,13 @@ const Camera        = @import("Camera.zig").Camera;
 const Object        = @import("object.zig").Object;
 const ScriptEngine  = @import("script/ScriptEngine.zig").ScriptEngine;
 const SceneRegistry = @import("SceneRegistry.zig").SceneRegistry;
+const WidgetRegistry = @import("WidgetRegistry.zig").WidgetRegistry;
+const ColorRegistry = @import("ColorRegistry.zig").ColorRegistry;
 const InputLib      = @import("script/libs/InputLib.zig");
 const AudioEngine   = @import("audio/AudioEngine.zig").AudioEngine;
 const Config        = @import("Config.zig").Config;
+const Color         = @import("Color.zig").Color;
+const Font          = @import("ui/Font.zig").Font;
 const scene         = @import("Scene.zig");
 
 const config_path = "config.toml";
@@ -53,19 +57,29 @@ pub fn main(init: std.process.Init) !void {
     var platform = try Platform.init();
     defer platform.deinit();
 
-    var window = try platform.createWindow("kebab", .{ .centered = null }, .{ .centered = null }, .{ .x = config.width*2, .y = config.height*2 });
+    var window = try platform.createWindow("kebab", .{ .centered = null }, .{ .centered = null }, .{
+        .x = @as(u16, @trunc(@as(f32, @floatFromInt(config.width))*config.scale)),
+        .y = @as(u16, @trunc(@as(f32, @floatFromInt(config.height))*config.scale))
+    });
+
     defer window.deinit();
 
-    var renderer = try Renderer.init(allocator, window, .{ .x = config.width, .y = config.height });
+    var renderer = try Renderer.init(allocator, window, .{ .x = config.width, .y = config.height }, config.scale);
     defer renderer.deinit();
 
     var audioEngine = try AudioEngine.init(allocator);
     defer audioEngine.deinit();
 
+    var widgetRegistry = WidgetRegistry.init(allocator);
     var sceneRegistry = SceneRegistry.init(allocator);
-    var scriptEngine = try ScriptEngine.init(allocator, io, &sceneRegistry, window, &audioEngine);
+    var colorRegistry = try ColorRegistry.init(allocator, io);
+    Color.registry = &colorRegistry;
+
+    var scriptEngine = try ScriptEngine.init(allocator, io, &sceneRegistry, window, &audioEngine, &widgetRegistry, &colorRegistry);
     defer scriptEngine.deinit();
+    defer widgetRegistry.deinit();
     defer sceneRegistry.deinit();
+    defer colorRegistry.deinit();
 
     scriptEngine.runFile("src/assets/scripts/main.lua");
     log.info("Initialized", .{});
@@ -73,6 +87,9 @@ pub fn main(init: std.process.Init) !void {
     var running = true;
     var lastTimeMs: u64 = sdl3.timer.getPerformanceCounter();
     const frequency = @as(f32, @floatFromInt(sdl3.timer.getPerformanceFrequency()));
+
+    const font = try Font.loadFromFile(allocator, io, "src/assets/fonts/NinetyFive/");
+    defer font.deinit();
 
     log.info("Starting loop", .{});
     while (running) {
@@ -92,6 +109,7 @@ pub fn main(init: std.process.Init) !void {
         // rendering
         renderer.drawBackground();
 
+        // render scene
         const current_scene = sceneRegistry.current_scene;
         if (current_scene) |s| {
             s.update(dt);
@@ -100,6 +118,11 @@ pub fn main(init: std.process.Init) !void {
             try renderer.drawScene(s);
         }
 
+        // render ui
+        renderer.drawRect(0, 0, 64, 64, 0x80000000);
+        renderer.drawText(font, 0, 0, "Hello, world!", 0xFFFFFFFF);
+
+        // submit
         try renderer.present();
 
         // frame limiter

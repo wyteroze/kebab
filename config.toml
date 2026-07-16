@@ -8,3 +8,7 @@ resolution = [ 540, 360 ]
 
 # The target FPS of the engine. Expects an integer. Default: 60
 fps = 120
+
+# The scale factor of the window. The window's size will be
+# resolution times this value
+scale = 2.0

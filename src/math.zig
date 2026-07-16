@@ -307,3 +307,18 @@ pub fn clipTriangleAgainstPlane(
         return .{ .n = 2, .t1 = t1, .t2 = t2 };
     } else unreachable;
 }
+
+/// Returns the smallest value of the two provided
+pub inline fn min(a: anytype, b: anytype) @TypeOf(a, b) {
+    return @min(a, b);
+}
+
+/// Returns the largest value of the two provided
+pub inline fn max(a: anytype, b: anytype) @TypeOf(a, b) {
+    return @max(a, b);
+}
+
+/// Clamps the provided value between `lower` and `upper`
+pub inline fn clamp(a: anytype, lower: anytype, upper: anytype) @TypeOf(a, lower, upper) {
+    return @max(lower, @min(upper, a));
+}

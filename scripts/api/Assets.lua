@@ -26,3 +26,9 @@ function Assets.loadImage(imagePath) end
 --- @param audioPath string
 --- @return AudioData
 function Assets.loadAudio(audioPath) end
+
+--- Loads a font from your game's `assets/fonts/`
+--- Expects a folder containing `map.toml` and its character sheet. (ex. `default`)
+--- @param fontName string
+--- @return Font
+function Assets.loadFont(fontName) end

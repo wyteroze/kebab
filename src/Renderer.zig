@@ -1,5 +1,9 @@
 // Copyright 2026 wyteroze. Licensed under the Apache License, Version 2.0.
 
+// TODO: Refactor into smaller bits, not just a huge file.
+
+// The renderer uses ARGB u32 for color
+
 const std = @import("std");
 const sdl3 = @import("sdl3");
 
@@ -11,6 +15,7 @@ const ImageData = @import("ImageData.zig").ImageData;
 const Camera    = @import("Camera.zig").Camera;
 const Scene     = @import("Scene.zig").Scene;
 const Object    = @import("object.zig").Object;
+const Font      = @import("ui/Font.zig").Font;
 
 const Mat4      = types.Mat4;
 const Vertex    = types.Vertex;
@@ -34,8 +39,9 @@ pub const Renderer = struct {
     default_camera: *Camera,
     tri_buffer: std.ArrayList(Triangle),
     tri_raster_list: std.ArrayList(Triangle),
+    scale: f32,
 
-    pub fn init(allocator: std.mem.Allocator, window: sdl3.video.Window, size: Vec2_usize) !Renderer {
+    pub fn init(allocator: std.mem.Allocator, window: sdl3.video.Window, size: Vec2_usize, scale: f32) !Renderer {
         const window_surface = try sdl3.video.Window.getSurface(window);
         const canvas = try sdl3.surface.Surface.init(size.x, size.y, .array_bgra_32);
         try canvas.setBlendMode(.none);
@@ -58,12 +64,12 @@ pub const Renderer = struct {
             .window = window,
             .default_camera = default_camera,
             .tri_buffer = std.ArrayList(Triangle).empty,
-            .tri_raster_list = std.ArrayList(Triangle).empty
+            .tri_raster_list = std.ArrayList(Triangle).empty,
+            .scale = scale
         };
     }
 
     pub fn deinit(self: *Renderer) void {
-        self.window_surface.deinit();
         self.canvas.deinit();
         self.allocator.free(self.depthbuffer);
         self.allocator.destroy(self.default_camera.transform);
@@ -73,37 +79,7 @@ pub const Renderer = struct {
     }
 
     pub fn present(self: Renderer) !void {
-        @setRuntimeSafety(false);
-
-        try self.canvas.lock();
-        defer self.canvas.unlock();
-        try self.window_surface.lock();
-        defer self.window_surface.unlock();
-        const src = self.canvas.value.pixels;
-        const dst = self.window_surface.value.pixels;
-        const src_pitch: usize = @intCast(self.canvas.value.pitch);
-        const dst_pitch: usize = @intCast(self.window_surface.value.pitch);
-        const w: usize = @intCast(self.canvas.value.w);
-        const h: usize = @intCast(self.canvas.value.h);
-
-        const src_bytes: [*]const u8 = @ptrCast(src);
-        const dst_bytes: [*]u8 = @ptrCast(dst);
-
-        var y: usize = 0;
-        while (y < h) : (y += 1) {
-            const src_row = src_bytes + y * src_pitch;
-            const dst_row0 = dst_bytes + (y * 2) * dst_pitch;
-            const dst_row1 = dst_bytes + (y * 2 + 1) * dst_pitch;
-
-            var x: usize = 0;
-            while (x < w) : (x += 1) {
-                const px: u32 = @as(*const u32, @alignCast(@ptrCast(src_row + x * 4))).*;
-                @as(*u32, @alignCast(@ptrCast(dst_row0 + x * 8))).* = px;
-                @as(*u32, @alignCast(@ptrCast(dst_row0 + x * 8 + 4))).* = px;
-            }
-            @memcpy(dst_row1[0 .. w * 8], dst_row0[0 .. w * 8]);
-        }
-
+        try self.canvas.blitScaled(null, self.window_surface, null, .nearest);
         try self.window.updateSurface();
     }
 
@@ -619,6 +595,83 @@ pub const Renderer = struct {
                     t += tstep;
                 }
             }
+        }
+    }
+
+    // UI methods
+
+    // dear god make the casts end
+    pub fn drawRect(self: *Renderer, x: i32, y: i32, w: i32, h: i32, color: u32) void {
+        const x0 = @as(i32, @intCast(math.max(0, x)));
+        const y0 = @as(i32, @intCast(math.max(0, y)));
+        const x1 = @as(i32, @intCast(math.min(@as(i32, @intCast(self.size.x)), x + w)));
+        const y1 = @as(i32, @intCast(math.min(@as(i32, @intCast(self.size.y)), y + h)));
+
+        var py = y0;
+        while (py < y1) : (py += 1) {
+            var px = x0;
+            while (px < x1) : (px += 1) {
+                self.blendPixel(@as(i32, @intCast(px)), @as(i32, @intCast(py)), color);
+            }
+        }
+    }
+
+    /// Blends a pixel at the given position with the given color
+    pub fn blendPixel(self: *Renderer, x: i32, y: i32, color: u32) void {
+        const a = (color >> 24) & 0xFF;
+        const r_src = (color >> 16) & 0xFF;
+        const g_src = (color >> 8) & 0xFF;
+        const b = color & 0xFF;
+
+        if (x < 0 or y < 0) return;
+        if (x >= self.size.x or y >= self.size.y) return;
+        const idx = @as(usize, @intCast(y)) * @as(usize, @intCast(self.size.x)) + @as(usize, @intCast(x));
+        if (idx >= self.getPixels().len) return;
+
+        const dst = self.getPixels()[idx];
+
+        const r_dst = (dst >> 16) & 0xFF;
+        const g_dst = (dst >> 8) & 0xFF;
+        const b_dst = dst & 0xFF;
+
+        const out_r = (r_src * a + r_dst * (255 - a)) / 255;
+        const out_g = (g_src * a + g_dst * (255 - a)) / 255;
+        const out_b = (b * a + b_dst * (255 - a)) / 255;
+
+        self.getPixels()[idx] = 0xFF000000 | (out_r << 16) | (out_g << 8) | out_b;
+    }
+
+    fn drawGlyph(self: *Renderer, font: *Font, codepoint: u21, x: i32, y: i32, foreground: u32) void {
+        const glyph = font.glyph(codepoint) orelse return;
+        const size_x = @as(usize, @intCast(glyph.size.x));
+        const size_y = @as(usize, @intCast(glyph.size.y));
+        const fg_alpha = foreground >> 24;
+
+        for (0..size_y) |gy| {
+            for (0..size_x) |gx| {
+                const texel = font.sheet.samplePixel(
+                    @as(u32, @intCast(glyph.pos.x + @as(u32, @intCast(gx)))),
+                    @as(u32, @intCast(glyph.pos.y + @as(u32, @intCast(gy))))
+                );
+                const alpha = texel >> 24;
+
+                if (alpha == 0) continue;
+
+                const out_alpha = alpha * fg_alpha / 255;
+                self.blendPixel(x + @as(i32, @intCast(gx)), y + @as(i32, @intCast(gy)), (out_alpha << 24) | (foreground & 0x00FFFFFF));
+            }
+        }
+    }
+
+    pub fn drawText(self: *Renderer, font: *Font, x: i32, y: i32, text: []const u8, color: u32) void {
+        var pos: i32 = x;
+
+        const view = std.unicode.Utf8View.init(text) catch return;
+        var iter = view.iterator();
+
+        while (iter.nextCodepoint()) |codepoint| {
+            self.drawGlyph(font, codepoint, pos, y, color);
+            if (font.glyph(codepoint)) |g| pos += @as(i32, @intCast(g.advance));
         }
     }
 };

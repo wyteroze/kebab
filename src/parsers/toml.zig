@@ -76,7 +76,7 @@ pub fn parseToml(allocator: std.mem.Allocator, reader: *std.Io.Reader) !*TomlTab
             continue;
         }
 
-        const eq = std.mem.indexOfScalar(u8, line, '=') orelse {
+        const eq = indexOfKeyValueSep(line) orelse {
             log.warn("line missing '=': '{s}'", .{line});
             return ParseError.InvalidSyntax;
         };
@@ -235,6 +235,24 @@ fn parseNumber(str: []const u8) !TomlValue {
 
     log.warn("could not parse value as number or bool: '{s}'", .{str});
     return ParseError.InvalidNumber;
+}
+
+fn indexOfKeyValueSep(line: []const u8) ?usize {
+    var in_string = false;
+    var i: usize = 0;
+    while (i < line.len) : (i += 1) {
+        const c = line[i];
+        if (in_string) {
+            if (c == '\\') i += 1
+            else if (c == '"') in_string = false;
+        } else if (c == '"') {
+            in_string = true;
+        } else if (c == '=') {
+            return i;
+        }
+    }
+
+    return null;
 }
 
 fn stripComment(line: []const u8) []const u8 {

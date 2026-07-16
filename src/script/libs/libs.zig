@@ -7,3 +7,6 @@ pub const ObjectLib = @import("ObjectLib.zig").ObjectLib;
 pub const SceneLib = @import("SceneLib.zig").SceneLib;
 pub const InputLib = @import("InputLib.zig").InputLib;
 pub const AudioLib = @import("AudioLib.zig").AudioLib;
+pub const ColorLib = @import("ColorLib.zig").ColorLib;
+pub const Vec2Lib = @import("Vec2Lib.zig").Vec2Lib;
+pub const UILib = @import("UILib.zig").UILib;
