@@ -152,14 +152,12 @@ pub fn main(init: std.process.Init) !void {
             } perf.stop();
         } perf.endFrame();
 
-        perf.dumpToLog();
-
         // frame limiter
-        const fps_ms: f32 = 1000.0 / @as(f32, @floatFromInt(config.fps));
+        const fps_ns: f32 = 1_000_000_000.0 / @as(f32, @floatFromInt(config.fps));
         const frameTime = sdl3.timer.getPerformanceCounter() - currentTime;
-        const frameTimeMs: f32 = @as(f32, @floatFromInt(frameTime)) * 1000.0 / frequency;
-        if (frameTimeMs < fps_ms) {
-            sdl3.timer.delayMilliseconds(@intFromFloat(fps_ms - frameTimeMs));
+        const frameTimeNs: f32 = @as(f32, @floatFromInt(frameTime)) * 1_000_000_000.0 / frequency;
+        if (frameTimeNs < fps_ns) {
+            sdl3.timer.delayNanosecondsPrecise(@intFromFloat(fps_ns - frameTimeNs));
         }
     }
 }
