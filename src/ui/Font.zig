@@ -4,7 +4,6 @@ const std = @import("std");
 const ImageData = @import("../ImageData.zig").ImageData;
 const TomlData = @import("../TomlData.zig").TomlData;
 const TomlValue = @import("../TomlData.zig").TomlValue;
-const Vec2_u32 = @import("../types.zig").Vec2_u32;
 const Glyph = @import("Glyph.zig").Glyph;
 const log = @import("../log.zig").font;
 
@@ -65,9 +64,28 @@ pub const Font = struct {
             };
             if (arr.len < 3) return error.InvalidGlyphEntry;
 
+            const pos = switch (arr[0]) {
+                .array => |a| a,
+                else => return error.InvalidGlyphEntry,
+            };
+            if (pos.len < 2) return error.InvalidGlyphEntry;
+
+            const size = switch (arr[1]) {
+                .array => |a| a,
+                else => return error.InvalidGlyphEntry
+            };
+            if (size.len < 2) return error.InvalidGlyphEntry;
+
+            const pos_x = try asU32(pos[0]);
+            const pos_y = try asU32(pos[1]);
+
+            const size_x = try asU32(size[0]);
+            const size_y = try asU32(size[1]);
+
             try glyphs.put(code_point, .{
-                .pos = try asVec2(arr[0]),
-                .size = try asVec2(arr[1]),
+                .pos_x = pos_x, .pos_y = pos_y,
+                .size_x = size_x, .size_y = size_y,
+
                 .advance = try asU32(arr[2]),
             });
         }
@@ -111,16 +129,6 @@ inline fn asU32(v: TomlValue) !u32 {
         .integer => |i| @intCast(i),
         else => error.InvalidGlyphEntry,
     };
-}
-
-fn asVec2(v: TomlValue) !Vec2_u32 {
-    const arr = switch (v) {
-        .array => |a| a,
-        else => return error.InvalidGlyphEntry,
-    };
-    if (arr.len < 2) return error.InvalidGlyphEntry;
-
-    return .{ .x = try asU32(arr[0]), .y = try asU32(arr[1]) };
 }
 
 fn firstCodepoint(s: []const u8) !u21 {

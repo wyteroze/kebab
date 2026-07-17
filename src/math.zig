@@ -1,13 +1,14 @@
 // Copyright 2026 wyteroze. Licensed under the Apache License, Version 2.0.
 
 const types = @import("types.zig");
+const render_types = @import("render/types.zig");
 
 const Mat4 = types.Mat4;
-const Vec2_SIMD = types.Vec2_SIMD;
-const Vec3_SIMD = types.Vec3_SIMD;
-const Vec4_SIMD = types.Vec4_SIMD;
-const Triangle = types.Triangle;
-const Vertex = types.Vertex;
+const Vec2 = types.Vec2;
+const Vec3 = types.Vec3;
+const Vec4 = types.Vec4;
+const Triangle = render_types.Triangle;
+const Vertex = render_types.Vertex;
 
 pub const ClipResult = struct {
     n: usize,
@@ -15,11 +16,11 @@ pub const ClipResult = struct {
     t2: ?Triangle
 };
 
-pub inline fn dot(a: Vec3_SIMD, b: Vec3_SIMD) f32 {
+pub inline fn dot(a: Vec3, b: Vec3) f32 {
     return @reduce(.Add, a * b);
 }
 
-pub fn cross(a: Vec3_SIMD, b: Vec3_SIMD) Vec3_SIMD {
+pub fn cross(a: Vec3, b: Vec3) Vec3 {
     const a_yzw = @shuffle(f32, a, a, @Vector(3, i32){1, 2, 0});
     const b_yzw = @shuffle(f32, b, b, @Vector(3, i32){2, 0, 1});
     const a_zxy = @shuffle(f32, a, a, @Vector(3, i32){2, 0, 1});
@@ -28,10 +29,10 @@ pub fn cross(a: Vec3_SIMD, b: Vec3_SIMD) Vec3_SIMD {
     return (a_yzw * b_yzw) - (a_zxy * b_zxy);
 }
 
-pub fn normal(p1: Vec3_SIMD, p2: Vec3_SIMD, p3: Vec3_SIMD) Vec3_SIMD {
+pub fn normal(p1: Vec3, p2: Vec3, p3: Vec3) Vec3 {
     const line1 = p2 - p1;
     const line2 = p3 - p1;
-    const norm = types.Vec3_SIMD{
+    const norm = types.Vec3{
         line1[1] * line2[2] - line1[2] * line2[1],
         line1[2] * line2[0] - line1[0] * line2[2],
         line1[0] * line2[1] - line1[1] * line2[0]
@@ -40,9 +41,9 @@ pub fn normal(p1: Vec3_SIMD, p2: Vec3_SIMD, p3: Vec3_SIMD) Vec3_SIMD {
     return normalize(norm);
 }
 
-pub inline fn normalize(a: Vec3_SIMD) Vec3_SIMD {
+pub inline fn normalize(a: Vec3) Vec3 {
     const norm_len = @sqrt(dot(a, a));
-    return a / @as(Vec3_SIMD, @splat(norm_len));
+    return a / @as(Vec3, @splat(norm_len));
 }
 
 /// Luminance is clamped between 0.0 - 1.0
@@ -55,10 +56,10 @@ pub fn luminanceToRGB(luminance: f32) u32 {
         (@as(u32, channel));
 }
 
-pub fn multiplyMatrixVector(self: Mat4, vec: Vec3_SIMD) Vec3_SIMD {
+pub fn multiplyMatrixVector(self: Mat4, vec: Vec3) Vec3 {
     const r = self.rows;
 
-    var output = Vec3_SIMD{
+    var output = Vec3{
         vec[0] * r[0][0] + vec[1] * r[1][0] + vec[2] * r[2][0] + r[3][0], // x
         vec[0] * r[0][1] + vec[1] * r[1][1] + vec[2] * r[2][1] + r[3][1], // y
         vec[0] * r[0][2] + vec[1] * r[1][2] + vec[2] * r[2][2] + r[3][2], // z
@@ -72,10 +73,10 @@ pub fn multiplyMatrixVector(self: Mat4, vec: Vec3_SIMD) Vec3_SIMD {
     return output;
 }
 
-pub fn multiplyMatrixVectorW(self: Mat4, vec: Vec3_SIMD) struct { xyz: Vec3_SIMD, w: f32 } {
+pub fn multiplyMatrixVectorW(self: Mat4, vec: Vec3) struct { xyz: Vec3, w: f32 } {
     const r = self.rows;
 
-    const xyz = Vec3_SIMD{
+    const xyz = Vec3{
         vec[0] * r[0][0] + vec[1] * r[1][0] + vec[2] * r[2][0] + r[3][0],
         vec[0] * r[0][1] + vec[1] * r[1][1] + vec[2] * r[2][1] + r[3][1],
         vec[0] * r[0][2] + vec[1] * r[1][2] + vec[2] * r[2][2] + r[3][2],
@@ -89,14 +90,14 @@ pub fn multiplyMatrixVectorW(self: Mat4, vec: Vec3_SIMD) struct { xyz: Vec3_SIMD
 pub fn multiplyMatrices(a: Mat4, b: Mat4) Mat4 {
     var out = Mat4.initZero();
     const b_transposed = Mat4{ .rows = .{
-        Vec4_SIMD{ b.rows[0][0], b.rows[1][0], b.rows[2][0], b.rows[3][0] },
-        Vec4_SIMD{ b.rows[0][1], b.rows[1][1], b.rows[2][1], b.rows[3][1] },
-        Vec4_SIMD{ b.rows[0][2], b.rows[1][2], b.rows[2][2], b.rows[3][2] },
-        Vec4_SIMD{ b.rows[0][3], b.rows[1][3], b.rows[2][3], b.rows[3][3] },
+        Vec4{ b.rows[0][0], b.rows[1][0], b.rows[2][0], b.rows[3][0] },
+        Vec4{ b.rows[0][1], b.rows[1][1], b.rows[2][1], b.rows[3][1] },
+        Vec4{ b.rows[0][2], b.rows[1][2], b.rows[2][2], b.rows[3][2] },
+        Vec4{ b.rows[0][3], b.rows[1][3], b.rows[2][3], b.rows[3][3] },
     }};
 
     inline for (0..4) |r| {
-        out.rows[r] = Vec4_SIMD{
+        out.rows[r] = Vec4{
             @reduce(.Add, a.rows[r] * b_transposed.rows[0]),
             @reduce(.Add, a.rows[r] * b_transposed.rows[1]),
             @reduce(.Add, a.rows[r] * b_transposed.rows[2]),
@@ -107,27 +108,27 @@ pub fn multiplyMatrices(a: Mat4, b: Mat4) Mat4 {
     return out;
 }
 
-pub fn pointAt(pos: Vec3_SIMD, target: Vec3_SIMD, up: Vec3_SIMD) Mat4 {
+pub fn pointAt(pos: Vec3, target: Vec3, up: Vec3) Mat4 {
     const forward_dir = normalize(target - pos);
-    const up_dir = normalize(up - (forward_dir * @as(Vec3_SIMD, @splat(dot(up, forward_dir)))));
+    const up_dir = normalize(up - (forward_dir * @as(Vec3, @splat(dot(up, forward_dir)))));
     const right_dir = normalize(cross(up_dir, forward_dir));
 
     const matrix = Mat4{ .rows = .{
-        Vec4_SIMD{ right_dir[0],    right_dir[1],   right_dir[2],   0 },
-        Vec4_SIMD{ up_dir[0],       up_dir[1],      up_dir[2],      0 },
-        Vec4_SIMD{ forward_dir[0],  forward_dir[1], forward_dir[2], 0 },
-        Vec4_SIMD{ pos[0],          pos[1],         pos[2],         1 }
+        Vec4{ right_dir[0],    right_dir[1],   right_dir[2],   0 },
+        Vec4{ up_dir[0],       up_dir[1],      up_dir[2],      0 },
+        Vec4{ forward_dir[0],  forward_dir[1], forward_dir[2], 0 },
+        Vec4{ pos[0],          pos[1],         pos[2],         1 }
     }};
 
     return matrix;
 }
 
 pub fn matrixQuickInverse(m: Mat4) Mat4 {
-    const r0 = Vec4_SIMD{ m.rows[0][0], m.rows[1][0], m.rows[2][0], 0.0 };
-    const r1 = Vec4_SIMD{ m.rows[0][1], m.rows[1][1], m.rows[2][1], 0.0 };
-    const r2 = Vec4_SIMD{ m.rows[0][2], m.rows[1][2], m.rows[2][2], 0.0 };
+    const r0 = Vec4{ m.rows[0][0], m.rows[1][0], m.rows[2][0], 0.0 };
+    const r1 = Vec4{ m.rows[0][1], m.rows[1][1], m.rows[2][1], 0.0 };
+    const r2 = Vec4{ m.rows[0][2], m.rows[1][2], m.rows[2][2], 0.0 };
 
-    const r3 = Vec4_SIMD{
+    const r3 = Vec4{
         -(m.rows[3][0] * r0[0] + m.rows[3][1] * r1[0] + m.rows[3][2] * r2[0]),
         -(m.rows[3][0] * r0[1] + m.rows[3][1] * r1[1] + m.rows[3][2] * r2[1]),
         -(m.rows[3][0] * r0[2] + m.rows[3][1] * r1[2] + m.rows[3][2] * r2[2]),
@@ -138,11 +139,11 @@ pub fn matrixQuickInverse(m: Mat4) Mat4 {
 }
 
 pub fn vectorIntersectPlane(
-    plane_point: Vec3_SIMD,
-    plane_normal: Vec3_SIMD,
-    line_start: Vec3_SIMD,
-    line_end: Vec3_SIMD
-) struct{ intersect: Vec3_SIMD, t: f32 } {
+    plane_point: Vec3,
+    plane_normal: Vec3,
+    line_start: Vec3,
+    line_end: Vec3
+) struct{ intersect: Vec3, t: f32 } {
     const normalized = normalize(plane_normal);
     const plane_dot = -dot(normalized, plane_point);
     const ad = dot(line_start, normalized);
@@ -151,7 +152,7 @@ pub fn vectorIntersectPlane(
     const t = (-plane_dot - ad) / (bd - ad);
 
     const start_to_end = line_end - line_start;
-    const intersect = start_to_end * @as(Vec3_SIMD, @splat(t));
+    const intersect = start_to_end * @as(Vec3, @splat(t));
 
     return .{
         .intersect = line_start + intersect,
@@ -160,8 +161,8 @@ pub fn vectorIntersectPlane(
 }
 
 pub fn clipTriangleAgainstPlane(
-    plane_point: Vec3_SIMD,
-    plane_normal: Vec3_SIMD,
+    plane_point: Vec3,
+    plane_normal: Vec3,
     triangle: Triangle
 ) ClipResult {
     const normalized = normalize(plane_normal);
@@ -171,13 +172,13 @@ pub fn clipTriangleAgainstPlane(
     const d1 = dot(normalized, triangle.pb.position) - plane_dp;
     const d2 = dot(normalized, triangle.pc.position) - plane_dp;
 
-    var inside_points: [3]Vec3_SIMD = undefined;
-    var outside_points: [3]Vec3_SIMD = undefined;
+    var inside_points: [3]Vec3 = undefined;
+    var outside_points: [3]Vec3 = undefined;
     var inside_point_count: usize = 0;
     var outside_point_count: usize = 0;
 
-    var inside_texes: [3]Vec2_SIMD = undefined;
-    var outside_texes: [3]Vec2_SIMD = undefined;
+    var inside_texes: [3]Vec2 = undefined;
+    var outside_texes: [3]Vec2 = undefined;
     var inside_tex_count: usize = 0;
     var outside_tex_count: usize = 0;
 
@@ -243,14 +244,14 @@ pub fn clipTriangleAgainstPlane(
             },
             .pb = Vertex {
                 .position = p1.intersect,
-                .uv = Vec2_SIMD{
+                .uv = Vec2{
                     p1.t * (outside_texes[0][0] - inside_texes[0][0]) + inside_texes[0][0],
                     p1.t * (outside_texes[0][1] - inside_texes[0][1]) + inside_texes[0][1]
                 }
             },
             .pc = Vertex {
                 .position = p2.intersect,
-                .uv = Vec2_SIMD{
+                .uv = Vec2{
                     p2.t * (outside_texes[1][0] - inside_texes[0][0]) + inside_texes[0][0],
                     p2.t * (outside_texes[1][1] - inside_texes[0][1]) + inside_texes[0][1]
                 }
@@ -262,7 +263,7 @@ pub fn clipTriangleAgainstPlane(
         // tri should be clipped. makes a quad in the form of two tris
         const p1 = vectorIntersectPlane(plane_point, plane_normal, inside_points[0], outside_points[0]);
         const p2 = vectorIntersectPlane(plane_point, plane_normal, inside_points[1], outside_points[0]);
-        const uv1 = Vec2_SIMD{
+        const uv1 = Vec2{
             p1.t * (outside_texes[0][0] - inside_texes[0][0]) + inside_texes[0][0],
             p1.t * (outside_texes[0][1] - inside_texes[0][1]) + inside_texes[0][1],
         };
@@ -297,7 +298,7 @@ pub fn clipTriangleAgainstPlane(
             },
             .pc = Vertex{
                 .position = p2.intersect,
-                .uv = Vec2_SIMD{
+                .uv = Vec2{
                     p2.t * (outside_texes[0][0] - inside_texes[1][0]) + inside_texes[1][0],
                     p2.t * (outside_texes[0][1] - inside_texes[1][1]) + inside_texes[1][1]
                 }

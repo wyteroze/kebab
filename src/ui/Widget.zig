@@ -3,7 +3,7 @@
 const std = @import("std");
 const Color = @import("../Color.zig").Color;
 const Font = @import("Font.zig").Font;
-const Vec2_SIMD = @import("../types.zig").Vec2_SIMD;
+const types = @import("../types.zig");
 const Vec2 = @import("../script/objects/Vec2.zig").Vec2;
 const Callback = @import("../script/shared.zig").Callback;
 const marshal = @import("../script/reflect/marshal.zig");
@@ -27,7 +27,7 @@ pub const Anchor = enum {
     Bottom,
     BottomRight,
 
-    pub fn factor(self: Anchor) Vec2_SIMD {
+    pub fn factor(self: Anchor) types.Vec2 {
         return switch (self) {
             .TopLeft => .{ 0, 0 },   .Top => .{ 0.5, 0 },   .TopRight => .{ 1, 0 },
             .Left    => .{ 0, 0.5 }, .Center => .{ 0.5, 0.5 }, .Right   => .{ 1, 0.5 },
@@ -46,8 +46,8 @@ pub const Widget = struct {
     allocator: std.mem.Allocator,
 
     anchor: Anchor,
-    offset: Vec2_SIMD,
-    size: Vec2_SIMD,
+    offset: types.Vec2,
+    size: types.Vec2,
     visible: bool = true,
     resolved: AbsRect = .{ .x=0, .y=0, .w=0, .h=0 },   // cached every frame
 

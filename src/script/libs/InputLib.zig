@@ -4,7 +4,6 @@ const std = @import("std");
 const sdl3 = @import("sdl3");
 const Callback = @import("../shared.zig").Callback;
 const types = @import("../../types.zig");
-const Vec2_SIMD = types.Vec2_SIMD;
 const Vec3 = @import("../objects/Vec3.zig").Vec3;
 const InputEvent = @import("../objects/InputEvent.zig").InputEvent;
 const keycode = sdl3.keycode;
@@ -79,7 +78,7 @@ pub fn fromMouseButton(button: sdl3.mouse.Button) ?InputCode {
     };
 }
 
-pub const InputValue = union(enum) { scalar: f32, vec2: Vec2_SIMD };
+pub const InputValue = union(enum) { scalar: f32, vec2: types.Vec2 };
 const Binding = struct { phase: enum { begin, end, change }, code: InputCode, cb: Callback };
 
 pub const InputState = struct {

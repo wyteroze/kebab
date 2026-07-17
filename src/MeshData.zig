@@ -2,12 +2,13 @@
 
 const std = @import("std");
 const types = @import("types.zig");
+const render_types = @import("render/types.zig");
 const obj_parser = @import("parsers/obj.zig");
 const ImageData = @import("ImageData.zig").ImageData;
 
-const Vec3_SIMD = types.Vec3_SIMD;
-const Vertex = types.Vertex;
-const Face = types.Face;
+const Vec3 = types.Vec3;
+const Vertex = render_types.Vertex;
+const Face = render_types.Face;
 
 pub const MeshData = struct {
     pub const lua_ref = true;
@@ -16,7 +17,7 @@ pub const MeshData = struct {
     allocator: std.mem.Allocator,
     vertices: []Vertex,
     indices: []usize,
-    faces: []types.Face,
+    faces: []Face,
     texture: ?*ImageData,
 
     pub fn init(

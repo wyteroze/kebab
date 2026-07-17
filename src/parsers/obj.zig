@@ -2,13 +2,14 @@
 
 const std = @import("std");
 const types = @import("../types.zig");
+const render_types = @import("../render/types.zig");
 const log = @import("../log.zig").obj;
 const MeshData = @import("../MeshData.zig").MeshData;
 
-const Vec2_SIMD = types.Vec2_SIMD;
-const Vec3_SIMD = types.Vec3_SIMD;
-const Vertex = types.Vertex;
-const Face = types.Face;
+const Vec2 = types.Vec2;
+const Vec3 = types.Vec3;
+const Vertex = render_types.Vertex;
+const Face = render_types.Face;
 
 pub const ParseError = error{
     MissingComponents,
@@ -20,9 +21,9 @@ pub const ParseError = error{
 pub fn parseObj(allocator: std.mem.Allocator, reader: *std.Io.Reader) !MeshData {
     log.debug("parsing obj", .{});
 
-    var raw_positions = std.ArrayList(Vec3_SIMD).empty;
+    var raw_positions = std.ArrayList(Vec3).empty;
     defer raw_positions.deinit(allocator);
-    var raw_uvs = std.ArrayList(Vec2_SIMD).empty;
+    var raw_uvs = std.ArrayList(Vec2).empty;
     defer raw_uvs.deinit(allocator);
 
     var vertices = std.ArrayList(Vertex).empty;
@@ -64,7 +65,7 @@ pub fn parseObj(allocator: std.mem.Allocator, reader: *std.Io.Reader) !MeshData 
     );
 }
 
-fn parseVertexLine(line: []const u8) ParseError!Vec3_SIMD {
+fn parseVertexLine(line: []const u8) ParseError!Vec3 {
     var iter = std.mem.splitScalar(u8, line, ' ');
     _ = iter.next(); // consume "v"
 
@@ -85,13 +86,13 @@ fn parseVertexLine(line: []const u8) ParseError!Vec3_SIMD {
         return ParseError.MissingComponents;
     }
 
-    return Vec3_SIMD{ vertex[0], vertex[1], vertex[2] };
+    return Vec3{ vertex[0], vertex[1], vertex[2] };
 }
 
 fn parseFaceLine(allocator: std.mem.Allocator,
     line: []const u8,
-    raw_positions: []const Vec3_SIMD,
-    raw_uvs: []const Vec2_SIMD,
+    raw_positions: []const Vec3,
+    raw_uvs: []const Vec2,
     vertices: *std.ArrayList(Vertex),
     indices: *std.ArrayList(usize)
 ) !usize {
@@ -124,7 +125,7 @@ fn parseFaceLine(allocator: std.mem.Allocator,
         const pos = raw_positions[v_idx - 1];
 
         // uv index
-        var uv: Vec2_SIMD = Vec2_SIMD{ 0.0, 0.0 };
+        var uv: Vec2 = Vec2{ 0.0, 0.0 };
         if (slash_iter.next()) |vt_str| {
             if (vt_str.len > 0) {
                 const vt_idx = std.fmt.parseInt(usize, vt_str, 10)
@@ -166,7 +167,7 @@ fn parseFaceLine(allocator: std.mem.Allocator,
 }
 
 
-fn parseTextureLine(line: []const u8) ParseError!Vec2_SIMD {
+fn parseTextureLine(line: []const u8) ParseError!Vec2 {
     var iter = std.mem.splitScalar(u8, line, ' ');
     _ = iter.next(); // consume "vt"
 
@@ -186,5 +187,5 @@ fn parseTextureLine(line: []const u8) ParseError!Vec2_SIMD {
         log.warn("texture line has fewer than 2 components: '{s}'", .{line});
         return ParseError.MissingComponents;
     }
-    return Vec2_SIMD{ uv[0], 1.0 - uv[1] }; // flip V
+    return Vec2{ uv[0], 1.0 - uv[1] }; // flip V
 }

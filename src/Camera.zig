@@ -6,8 +6,8 @@ const math = @import("math.zig");
 
 const Mat4 = types.Mat4;
 const Transform = types.Transform;
-const Vec3_SIMD = types.Vec3_SIMD;
-const Vec4_SIMD = types.Vec4_SIMD;
+const Vec3 = types.Vec3;
+const Vec4 = types.Vec4;
 
 pub const Camera = struct {
     nearPlane: f32,
@@ -28,17 +28,17 @@ pub const Camera = struct {
         const fov_rad = 1.0 / @tan((self.fov / 180.0 * std.math.pi)/2);
 
         return .{ .rows = .{
-            Vec4_SIMD{ aspectRatio * fov_rad, 0, 0, 0 },
-            Vec4_SIMD{ 0, fov_rad, 0, 0 },
-            Vec4_SIMD{ 0, 0, self.farPlane / (self.farPlane - self.nearPlane), 1.0 },
-            Vec4_SIMD{ 0, 0, (-self.farPlane * self.nearPlane) / (self.farPlane - self.nearPlane), 0 }
+            Vec4{ aspectRatio * fov_rad, 0, 0, 0 },
+            Vec4{ 0, fov_rad, 0, 0 },
+            Vec4{ 0, 0, self.farPlane / (self.farPlane - self.nearPlane), 1.0 },
+            Vec4{ 0, 0, (-self.farPlane * self.nearPlane) / (self.farPlane - self.nearPlane), 0 }
         }};
     }
 
-    pub fn getLookDirection(self: Camera) Vec3_SIMD {
+    pub fn getLookDirection(self: Camera) Vec3 {
         const pitch = self.transform.rotation[0] * (std.math.pi / 180.0);
         const yaw = self.transform.rotation[1] * (std.math.pi / 180.0);
-        const look_dir = Vec3_SIMD{
+        const look_dir = Vec3{
             @sin(yaw) * @cos(pitch),
             -@sin(pitch),
             @cos(yaw) * @cos(pitch)
@@ -47,9 +47,9 @@ pub const Camera = struct {
         return look_dir;
     }
 
-    pub fn getRightDirection(self: Camera) Vec3_SIMD {
+    pub fn getRightDirection(self: Camera) Vec3 {
         const yaw = self.transform.rotation[1] * (std.math.pi / 180.0);
-        const look_dir = Vec3_SIMD{
+        const look_dir = Vec3{
             @cos(yaw),
             0,
             -@sin(yaw)
@@ -58,7 +58,7 @@ pub const Camera = struct {
         return look_dir;
     }
 
-    pub fn getUpDirection(self: Camera) Vec3_SIMD {
+    pub fn getUpDirection(self: Camera) Vec3 {
         const up = math.cross(
             self.getLookDirection(),
             self.getRightDirection()
@@ -68,7 +68,7 @@ pub const Camera = struct {
     }
 
     pub fn getViewMatrix(self: Camera) Mat4 {
-        const up = Vec3_SIMD{ 0.0, 1.0, 0.0 };
+        const up = Vec3{ 0.0, 1.0, 0.0 };
         const look_dir = self.getLookDirection();
 
         const target = self.transform.position + look_dir;

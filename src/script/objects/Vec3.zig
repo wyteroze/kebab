@@ -1,7 +1,7 @@
 // Copyright 2026 wyteroze. Licensed under the Apache License, Version 2.0.
 
 const std = @import("std");
-const Vec3_SIMD = @import("../../types.zig").Vec3_SIMD;
+const types = @import("../../types.zig");
 const shared = @import("../shared.zig");
 
 pub const Vec3 = struct {
@@ -15,10 +15,10 @@ pub const Vec3 = struct {
         .unm = "unm"
     };
 
-    vec: Vec3_SIMD,
+    vec: types.Vec3,
 
     pub fn init(x: f32, y: f32, z: f32) Vec3 {
-        return .{ .vec = Vec3_SIMD{ x, y, z } };
+        return .{ .vec = types.Vec3{ x, y, z } };
     }
 
     pub fn getX(self: Vec3) f32 { return self.vec[0]; }

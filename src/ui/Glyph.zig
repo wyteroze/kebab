@@ -3,10 +3,10 @@
 const std = @import("std");
 
 // We use u32 because it's the max size of .bmp files.
-const Vec2_u32 = @import("../types.zig").Vec2_u32;
 
 pub const Glyph = struct {
-    pos: Vec2_u32,
-    size: Vec2_u32,
+    pos_x: u32, pos_y: u32,
+    size_x: u32, size_y: u32,
+
     advance: u32,
 };

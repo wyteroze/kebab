@@ -7,7 +7,9 @@ const zlua = @import("zlua");
 const types         = @import("types.zig");
 const log           = @import("log.zig").engine;
 const Platform      = @import("Platform.zig").Platform;
-const Renderer      = @import("Renderer.zig").Renderer;
+const Renderer      = @import("render/Renderer.zig").Renderer;
+const RenderTarget  = @import("render/RenderTarget.zig").RenderTarget;
+const UIPainter     = @import("render/UIPainter.zig");
 const MeshData      = @import("MeshData.zig").MeshData;
 const ImageData     = @import("ImageData.zig").ImageData;
 const Camera        = @import("Camera.zig").Camera;
@@ -24,6 +26,8 @@ const Color         = @import("Color.zig").Color;
 const Font          = @import("ui/Font.zig").Font;
 const scene         = @import("Scene.zig");
 const perf          = @import("profile/perf.zig");
+
+const clear_color = 0xFF_8A_AA_FF;
 
 const config_path = "config.toml";
 
@@ -66,14 +70,19 @@ pub fn main(init: std.process.Init) !void {
     var platform = try Platform.init();
     defer platform.deinit();
 
-    var window = try platform.createWindow("kebab", .{ .centered = null }, .{ .centered = null }, .{
-        .x = @as(u16, @trunc(@as(f32, @floatFromInt(config.width))*config.scale)),
-        .y = @as(u16, @trunc(@as(f32, @floatFromInt(config.height))*config.scale))
-    });
+    var window = try platform.createWindow(
+        "kebab", // window name
+        .{ .centered = null }, .{ .centered = null }, // window position
+        @as(u16, @trunc(@as(f32, @floatFromInt(config.width))*config.scale)), // size x
+        @as(u16, @trunc(@as(f32, @floatFromInt(config.height))*config.scale)) // size y
+    );
 
     defer window.deinit();
 
-    var renderer = try Renderer.init(allocator, window, .{ .x = config.width, .y = config.height }, config.scale);
+    var target = try RenderTarget.init(allocator, window, config.width, config.height, config.scale, true, true);
+    defer target.deinit();
+
+    var renderer = try Renderer.init(allocator);
     defer renderer.deinit();
 
     var audioEngine = try AudioEngine.init(allocator);
@@ -120,35 +129,28 @@ pub fn main(init: std.process.Init) !void {
 
             // rendering
             perf.start("clear"); {
-                renderer.drawBackground();
+                target.clear(clear_color, true);
             } perf.stop();
 
             // render scene
             perf.start("scene"); {
                 const current_scene = sceneRegistry.current_scene;
-                if (current_scene) |s| {
-                    perf.start("update"); {
-                        s.update(dt);
-                    } perf.stop();
-
-                    perf.start("audio"); {
-                        try audioEngine.tick(s);
-                    } perf.stop();
-                    perf.start("draw"); {
-                        try renderer.drawScene(s);
-                    } perf.stop();
-                }
+                 if (current_scene) |s| {
+                     perf.start("update"); { s.update(dt); } perf.stop();
+                     perf.start("audio"); { try audioEngine.tick(s); } perf.stop();
+                     perf.start("draw"); { try renderer.renderScene(&target, s); } perf.stop();
+                 }
             } perf.stop();
 
             // render ui
             perf.start("ui"); {
-                renderer.drawRect(0, 0, 64, 64, 0x80000000);
-                renderer.drawText(font, 0, 0, "Hello, world!", 0xFFFFFFFF);
+                UIPainter.rect(&target, 0, 0, 64, 64, 0x80000000, null);
+                UIPainter.text(&target, font, 0, 0, "Hello, world!", 0xFFFFFFFF, null);
             } perf.stop();
 
             // submit
             perf.start("present"); {
-                try renderer.present();
+                try target.present();
             } perf.stop();
         } perf.endFrame();
 
