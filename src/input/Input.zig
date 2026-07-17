@@ -2,11 +2,10 @@
 
 const std = @import("std");
 const sdl3 = @import("sdl3");
-const Callback = @import("../shared.zig").Callback;
-const types = @import("../../types.zig");
-const Vec3 = @import("../objects/Vec3.zig").Vec3;
-const InputEvent = @import("../objects/InputEvent.zig").InputEvent;
-const keycode = sdl3.keycode;
+const Callback = @import("../script/shared.zig").Callback;
+const types = @import("../types.zig");
+const Vec3 = @import("../script/objects/Vec3.zig").Vec3;
+const InputEvent = @import("../script/objects/InputEvent.zig").InputEvent;
 
 pub const InputCode = enum {
     A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
@@ -79,13 +78,16 @@ pub fn fromMouseButton(button: sdl3.mouse.Button) ?InputCode {
 }
 
 pub const InputValue = union(enum) { scalar: f32, vec2: types.Vec2 };
-const Binding = struct { phase: enum { begin, end, change }, code: InputCode, cb: Callback };
+pub const Binding = struct { phase: enum { begin, end, change }, code: InputCode, cb: Callback };
 
 pub const InputState = struct {
     allocator: std.mem.Allocator,
-    window: sdl3.video.Window,
     bindings: std.ArrayList(Binding),
     down: std.AutoHashMap(InputCode, InputValue),
+
+    pub fn init(allocator: std.mem.Allocator) InputState {
+        return .{ .allocator = allocator, .bindings = .empty, .down = .init(allocator) };
+    }
 
     fn fire(self: *InputState, phase: anytype, code: InputCode, ev: InputEvent) void {
         for (self.bindings.items) |b| {
@@ -127,46 +129,5 @@ pub const InputState = struct {
         for (self.bindings.items) |b| b.cb.deinit();
         self.bindings.deinit(self.allocator);
         self.down.deinit();
-    }
-};
-
-pub var current: ?*InputState = null;
-
-pub const InputLib = struct {
-    pub const name = "Input";
-    pub const hidden = .{ "state" };
-    state: *InputState,
-
-    pub fn init(allocator: std.mem.Allocator, window: sdl3.video.Window) !InputLib {
-        const st = try allocator.create(InputState);
-        st.* = .{ .allocator = allocator, .window = window, .bindings = .empty, .down = .init(allocator) };
-        current = st;
-
-        return .{ .state = st };
-    }
-
-    pub fn deinit(self: *InputLib) void {
-        self.state.deinit();
-        self.state.allocator.destroy(self.state);
-        current = null;
-    }
-
-    fn bind(self: *InputLib, phase: anytype, code: InputCode, cb: Callback) !void {
-        try self.state.bindings.append(self.state.allocator, .{ .phase = phase, .code = code, .cb = cb });
-    }
-    pub fn OnBegin(self: *InputLib, code: InputCode, cb: Callback) !void { try self.bind(.begin, code, cb); }
-    pub fn OnEnd(self: *InputLib, code: InputCode, cb: Callback) !void { try self.bind(.end, code, cb); }
-    pub fn OnChange(self: *InputLib, code: InputCode, cb: Callback) !void { try self.bind(.change, code, cb); }
-
-    pub fn IsDown(self: *InputLib, code: InputCode) bool { return self.state.down.contains(code); }
-    pub fn GetValue(self: *InputLib, code: InputCode) f32 {
-        return if (self.state.down.get(code)) |v| switch (v) { .scalar => |s| s, .vec2 => 0 } else 0;
-    }
-
-    pub fn setMouseVisible(_: *InputLib, visible: bool) !void {
-        if (visible) try sdl3.mouse.show() else try sdl3.mouse.hide();
-    }
-    pub fn setMouseLocked(self: *InputLib, locked: bool) !void {
-        try sdl3.mouse.setWindowRelativeMode(self.state.window, locked);
     }
 };

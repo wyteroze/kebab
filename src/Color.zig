@@ -6,10 +6,21 @@ const ColorRegistry = @import("ColorRegistry.zig").ColorRegistry;
 
 pub const Color = struct {
     pub const name = "ColorObject";
-    pub const hidden = .{ "color", "loadNames", "deinitNames", "named" };
+    pub const hidden = .{ "color", "loadNames", "deinitNames", "named", "fromARGB", "fromHex" };
     pub var registry: *ColorRegistry = undefined;
     hex_buf: []u8 = undefined,
     color: u32,
+
+    pub fn fromARGB(a: u8, r: u8, g: u8, b: u8) Color {
+        return .{ .color = (@as(u32, a) << 24) | (@as(u32, r) << 16) | (@as(u32, g) << 8) | b };
+    }
+
+    pub fn fromHex(hexCode: []const u8) !Color {
+        var hex = hexCode;
+        if (hex.len >= 2 and hex[0] == '0' and (hex[1] == 'x' or hex[1] == 'X')) hex = hex[2..];
+
+        return .{ .color = std.fmt.parseInt(u32, hex, 16) catch return error.InvalidHex };
+    }
 
     pub fn GetName(self: Color) []const u8 {
         const r: i32 = @intCast((self.color >> 16) & 0xFF);

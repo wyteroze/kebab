@@ -3,7 +3,6 @@
 const std = @import("std");
 
 const Object = @import("object.zig").Object;
-const Camera = @import("Camera.zig").Camera;
 const MeshData = @import("MeshData.zig").MeshData;
 const ImageData = @import("ImageData.zig").ImageData;
 const Handle = @import("script/reflect/marshal.zig").Handle;
@@ -15,7 +14,7 @@ pub var skybox_mesh: ?MeshData = null;
 pub const Scene = struct {
     pub const lua_name = "SceneObject";
     pub const hidden = .{
-        "objects", "callbacks", "skybox", "camera",
+        "objects", "callbacks", "skybox",
         "addObject", "removeObject", "update"
     };
     pub const lua_ref = true;
@@ -26,13 +25,11 @@ pub const Scene = struct {
     audios: std.ArrayList(*AudioSource),
     name: ?[]const u8,
     callbacks: std.ArrayList(Callback),
-    camera: ?*Object,
     skybox: MeshData,
 
     pub fn init(allocator: std.mem.Allocator, name: ?[]const u8) !Scene {
         return .{
             .name = if (name) |n| try allocator.dupe(u8, n) else null,
-            .camera = null,
             .allocator = allocator,
             .objects = .empty,
             .callbacks = .empty,
@@ -84,16 +81,6 @@ pub const Scene = struct {
     }
 
     // lua methods
-    pub fn getCamera(self: Scene) ?Handle(Object) {
-        return .{ .ptr = self.camera orelse return null };
-    }
-
-    pub fn setCamera(self: *Scene, camera: Handle(Object)) !void {
-        switch (camera.ptr.data) {
-            .camera => self.camera = camera.ptr,
-            else => |d| { self.diagnostic.set("expected camera, got {s}", .{d.luaName()}); return error.ExpectedCamera; },
-        }
-    }
 
     pub fn getSkyboxTexture(self: Scene) ?Handle(ImageData) {
         return .{ .ptr = self.skybox.texture orelse return null };

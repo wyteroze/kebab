@@ -271,7 +271,14 @@ pub fn wrapIndex(comptime Lib: type, name: [:0]const u8) fn (*Lua) i32 {
             inline for (comptime std.meta.fields(Lib)) |f| {
                 if (comptime isHidden(Lib, f.name)) continue;
                 if (std.mem.eql(u8, f.name, key)) {
-                    push(l, @field(self.*, f.name));
+                    // Ref-type fields are handed back by reference (a Handle to the
+                    // field's real address) so their methods can reach the parent,
+                    // and so we don't box a fresh copy on every access.
+                    if (comptime isRefType(f.type)) {
+                        push(l, Handle(f.type){ .ptr = &@field(self.*, f.name) });
+                    } else {
+                        push(l, @field(self.*, f.name));
+                    }
                     return 1;
                 }
             }

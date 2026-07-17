@@ -19,15 +19,15 @@ const SceneRegistry = @import("SceneRegistry.zig").SceneRegistry;
 const WidgetRegistry= @import("WidgetRegistry.zig").WidgetRegistry;
 const ColorRegistry = @import("ColorRegistry.zig").ColorRegistry;
 const ThreadRegistry= @import("ThreadRegistry.zig").ThreadRegistry;
-const InputLib      = @import("script/libs/InputLib.zig");
+const WindowManager = @import("WindowManager.zig").WindowManager;
 const AudioEngine   = @import("audio/AudioEngine.zig").AudioEngine;
 const Config        = @import("Config.zig").Config;
 const Color         = @import("Color.zig").Color;
 const Font          = @import("ui/Font.zig").Font;
+const Widget        = @import("ui/Widget.zig").Widget;
+const widget        = @import("ui/Widget.zig");
 const scene         = @import("Scene.zig");
 const perf          = @import("profile/perf.zig");
-
-const clear_color = 0xFF_8A_AA_FF;
 
 const config_path = "config.toml";
 
@@ -45,10 +45,6 @@ pub const std_options: std.Options = .{
         .{ .scope = .engine, .level = .info }
     }
 };
-
-fn isPressed(state: []const u8, scancode: sdl3.Scancode) bool {
-    return state[@intFromEnum(scancode)] != 0;
-}
 
 pub fn main(init: std.process.Init) !void {
     log.info("Initializing...", .{});
@@ -70,17 +66,7 @@ pub fn main(init: std.process.Init) !void {
     var platform = try Platform.init();
     defer platform.deinit();
 
-    var window = try platform.createWindow(
-        "kebab", // window name
-        .{ .centered = null }, .{ .centered = null }, // window position
-        @as(u16, @trunc(@as(f32, @floatFromInt(config.width))*config.scale)), // size x
-        @as(u16, @trunc(@as(f32, @floatFromInt(config.height))*config.scale)) // size y
-    );
-
-    defer window.deinit();
-
-    var target = try RenderTarget.init(allocator, window, config.width, config.height, config.scale, true, true);
-    defer target.deinit();
+    var windowManager = WindowManager.init(allocator, &platform);
 
     var renderer = try Renderer.init(allocator);
     defer renderer.deinit();
@@ -93,8 +79,11 @@ pub fn main(init: std.process.Init) !void {
     var colorRegistry = try ColorRegistry.init(allocator, io);
     Color.registry = &colorRegistry;
 
-    var scriptEngine = try ScriptEngine.init(allocator, io, &sceneRegistry, window, &audioEngine, &widgetRegistry, &colorRegistry);
+    var scriptEngine = try ScriptEngine.init(allocator, io, &sceneRegistry, &platform, &audioEngine, &windowManager, &colorRegistry);
     defer scriptEngine.deinit();
+    // Tear windows down before the script engine: their Lua callbacks (input
+    // bindings, OnClick, OnUpdate) must be unref'd while the Lua state is alive.
+    defer windowManager.deinit();
     defer widgetRegistry.deinit();
     defer sceneRegistry.deinit();
     defer colorRegistry.deinit();
@@ -119,38 +108,33 @@ pub fn main(init: std.process.Init) !void {
             // events
             perf.start("events"); {
                 while (sdl3.events.poll()) |e| {
-                    switch (e) {
-                        .quit => running = false,
-
-                        else => if (InputLib.current) |c| c.dispatch(e)
-                    }
+                    if (!windowManager.handleEvent(e)) { running = false; break; }
                 }
             } perf.stop();
 
-            // rendering
-            perf.start("clear"); {
-                target.clear(clear_color, true);
-            } perf.stop();
-
             // render scene
-            perf.start("scene"); {
-                const current_scene = sceneRegistry.current_scene;
-                 if (current_scene) |s| {
-                     perf.start("update"); { s.update(dt); } perf.stop();
-                     perf.start("audio"); { try audioEngine.tick(s); } perf.stop();
-                     perf.start("draw"); { try renderer.renderScene(&target, s); } perf.stop();
-                 }
+            perf.start("scenes"); {
+                var cam: *Camera = renderer.pipeline.default_camera;
+                if (windowManager.focused) |f| if (f.camera) |f_cam| switch (f_cam.data) {
+                    .camera => |c| cam = c.camera,
+                    else => {},
+                };
+
+                for (sceneRegistry.scenes.items) |s| {
+                    perf.start("update"); { s.update(dt); } perf.stop();
+                    perf.start("audio"); { try audioEngine.tick(s, cam); } perf.stop();
+                }
             } perf.stop();
 
-            // render ui
-            perf.start("ui"); {
-                UIPainter.rect(&target, 0, 0, 64, 64, 0x80000000, null);
-                UIPainter.text(&target, font, 0, 0, "Hello, world!", 0xFFFFFFFF, null);
+            perf.start("windows"); {
+                for (windowManager.windows.items) |w| {
+                    w.update(dt);
+                }
             } perf.stop();
 
             // submit
-            perf.start("present"); {
-                try target.present();
+            perf.start("render"); {
+                try windowManager.renderAll(&renderer, font);
             } perf.stop();
         } perf.endFrame();
 

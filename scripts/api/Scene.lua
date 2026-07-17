@@ -5,8 +5,12 @@
 --- @meta Scene
 -- This file is for the Lua Language Server, do not require it
 
---- Represents a collection of objects, and has
---- other responsibilities.
+--- Represents a collection of objects and audio that make up a world.
+---
+--- A scene holds shared world state; it does not know how it is viewed. Assign a
+--- scene to one or more windows with `window.Scene = myScene`, and give each of
+--- those windows its own `Camera` to look into it. There is no global "current
+--- scene" — rendering is driven entirely by what each window is assigned.
 --- @class Scene
 ---
 --- Objects under the scene.
@@ -14,16 +18,14 @@
 --- Audios under the scene.
 --- @field Audios Audio[]
 ---
---- The camera that's used to render the scene.
---- @field Camera? Camera
----
---- The image data that will be used for the skybox's texture. It expects a cubemap texture, otherwise the skybox may look bugged.
+--- The image data used for the skybox's texture. It expects a cubemap texture, otherwise the skybox may look bugged.
 --- @field SkyboxTexture? ImageData
 ---
---- "Attaches" a function to the scene's update event.
---- This function will be called every time the scene updates,
---- unless detached by calling the returned function once.
---- @field OnUpdate fun(self: Scene, callback: fun(delta: number)): fun()
+--- Attaches a function to the scene's update event. It is called once per frame
+--- with the delta time (in seconds) while the scene is assigned to at least one
+--- window. Use this for shared world simulation (moving objects, etc.). For
+--- per-window logic like camera movement, use Window:OnUpdate instead.
+--- @field OnUpdate fun(self: Scene, callback: fun(delta: number))
 ---
 --- Adds an object to the scene's Objects list, making it visible. Does nothing if the object is already in the scene.
 --- @field AddObject fun(self: Scene, object: Object)
@@ -37,14 +39,11 @@
 --- Removes an audio from the scene. Does nothing if the audio isn't in the scene.
 --- @field RemoveAudio fun(self: Scene, audio: Audio)
 
---- Factory for creating and managing scenes
+--- Factory for creating scenes.
 --- @class SceneLib
----
---- The scene that will be rendered. You may only have one scene enabled at any time. Set to nil to render nothing.
---- @field CurrentScene Scene?
 Scene = {}
 
---- Returns a new Scene
+--- Returns a new Scene.
 --- @param name? string
 --- @return Scene
 function Scene.new(name) end

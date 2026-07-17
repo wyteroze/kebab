@@ -3,6 +3,7 @@
 const std = @import("std");
 const Color = @import("../Color.zig").Color;
 const Font = @import("Font.zig").Font;
+const TextSize = @import("Font.zig").TextSize;
 const types = @import("../types.zig");
 const Vec2 = @import("../script/objects/Vec2.zig").Vec2;
 const Callback = @import("../script/shared.zig").Callback;
@@ -11,10 +12,22 @@ const Handle = marshal.Handle;
 const Diagnostic = @import("../script/shared.zig").Diagnostic;
 
 
-const TextContent = struct { text: []const u8 = "", color: Color, font: ?*const Font = null };
+pub const ButtonState = enum { normal, hover, pressed };
+pub const ButtonData = struct {
+    state: ButtonState,
+    bg: Color,
+    border: ?Color = null,
+    content: TextContent,
+    on_click: ?Callback = null
+};
+const TextContent = struct {
+    text: []const u8 = "",
+    color: Color,
+    font: ?*Font = null,
+};
 pub const PanelData  = struct { bg: Color, border: ?Color = null };
 pub const LabelData  = struct { content: TextContent };
-pub const ButtonData = struct { bg: Color, border: ?Color = null, content: TextContent, on_click: ?Callback = null };
+
 pub const AbsRect = struct { x: f32, y: f32, w: f32, h: f32 };
 pub const Anchor = enum {
     TopLeft,
@@ -132,6 +145,28 @@ pub const Widget = struct {
 
     fn textContent(self: *Widget) ?*TextContent {
         return switch (self.data) { .label => |*l| &l.content, .button => |*b| &b.content, .panel => null };
+    }
+
+    pub fn update(self: *Widget, container_w: f32, container_h: f32, default_font: *Font) void {
+        const f = self.anchor.factor();
+        switch (self.data) {
+            .label => |l| {
+                const font = l.content.font orelse default_font;
+                const sz = font.measure(l.content.text) catch TextSize{ .w = 0, .h = 0 };
+
+                self.size = .{ @floatFromInt(sz.w), @floatFromInt(sz.h) };
+            },
+
+            else => {}
+        }
+
+        const size_w = self.size[0];
+        const size_h = self.size[1];
+
+        const origin_x = container_w * f[0] + self.offset[0] - size_w * f[0];
+        const origin_y = container_h * f[1] + self.offset[1] - size_h * f[1];
+
+        self.resolved = .{ .x = @trunc(origin_x), .y = @trunc(origin_y), .w = @trunc(size_w), .h = @trunc(size_h) };
     }
 
     pub fn deinit(self: *Widget) void {

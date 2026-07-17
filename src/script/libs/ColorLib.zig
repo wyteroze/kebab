@@ -25,16 +25,16 @@ pub const ColorLib = struct {
     }
 
     pub fn fromARGB(_: *ColorLib, a: u8, r: u8, g: u8, b: u8) Color {
-        return .{ .color = (@as(u32, a) << 24) | (@as(u32, r) << 16) | (@as(u32, g) << 8) | b };
+        return Color.fromARGB(a, r, g, b);
     }
 
     pub fn fromHex(self: *ColorLib, hexCode: []const u8) !Color {
-        var hex = hexCode;
-        if (hex.len >= 2 and hex[0] == '0' and (hex[1] == 'x' or hex[1] == 'X')) hex = hex[2..];
+        return Color.fromHex(hexCode) catch |e| {
+            switch (e) {
+                error.InvalidHex => self.diagnostic.set("invalid hex code '{s}', expected AARRGGBB", .{hexCode}),
+            }
 
-        return .{ .color = std.fmt.parseInt(u32, hex, 16) catch {
-            self.diagnostic.set("invalid hex code '{s}', expected AARRGGBB", .{hexCode});
-            return error.InvalidHex;
-        } };
+            return e;
+        };
     }
 };

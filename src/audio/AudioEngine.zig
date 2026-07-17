@@ -6,6 +6,8 @@ pub const AudioSource = @import("AudioSource.zig").AudioSource;
 pub const AudioData = @import("AudioData.zig").AudioData;
 pub const Object = @import("../object.zig").Object;
 pub const Scene = @import("../Scene.zig").Scene;
+pub const Camera = @import("../Camera.zig").Camera;
+
 
 // todo: move this to be a property under AudioSource
 const max_hearing_distance: f32 = 50.0;
@@ -65,9 +67,9 @@ pub const AudioEngine = struct {
         self.allocator.destroy(source);
     }
 
-    pub fn tick(self: *AudioEngine, current_scene: *Scene) !void {
-        for (current_scene.audios.items) |a| {
-            self.applyPositionalGain(a, current_scene);
+    pub fn tick(self: *AudioEngine, scene: *Scene, cam: *Camera) !void {
+        for (scene.audios.items) |a| {
+            self.applyPositionalGain(a, cam);
             try a.update();
         }
     }
@@ -82,19 +84,17 @@ pub const AudioEngine = struct {
         return false;
     }
 
-    fn applyPositionalGain(self: *AudioEngine, source: *AudioSource, current_scene: ?*Scene) void {
+    fn applyPositionalGain(self: *AudioEngine, source: *AudioSource, cam: ?*Camera) void {
         const attached = source.attached_to orelse {
             source.stream.setGain(source.volume) catch {};
             return;
         };
 
-        const listener = self.listener orelse current_scene.?.camera orelse {
-            source.stream.setGain(source.volume) catch {};
-            return;
-        };
-
         const source_pos = attached.getPosition().vec;
-        const listener_pos = listener.getPosition().vec;
+        const listener_pos = if (self.listener) |l| l.getPosition().vec
+            else if (cam) |c| c.transform.position
+            else { source.stream.setGain(source.volume) catch {}; return; };
+
         const diff = source_pos - listener_pos;
         const distance = @sqrt(diff[0] * diff[0] + diff[1] * diff[1] + diff[2] * diff[2]);
 

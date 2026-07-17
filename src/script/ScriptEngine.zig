@@ -14,6 +14,8 @@ const SceneRegistry = @import("../SceneRegistry.zig").SceneRegistry;
 const WidgetRegistry = @import("../WidgetRegistry.zig").WidgetRegistry;
 const AudioEngine = @import("../audio/AudioEngine.zig").AudioEngine;
 const ColorRegistry = @import("../ColorRegistry.zig").ColorRegistry;
+const WindowManager = @import("../WindowManager.zig").WindowManager;
+const Platform = @import("../Platform.zig").Platform;
 
 pub const ScriptEngine = struct {
     lua: *Lua,
@@ -24,9 +26,9 @@ pub const ScriptEngine = struct {
         allocator: std.mem.Allocator,
         io: std.Io,
         sceneRegistry: *SceneRegistry,
-        window: sdl3.video.Window,
+        platform: *Platform,
         audioEngine: *AudioEngine,
-        widgetRegistry: *WidgetRegistry,
+        windowManager: *WindowManager,
         colorRegistry: *ColorRegistry,
     ) !ScriptEngine {
         const arena = try allocator.create(std.heap.ArenaAllocator);
@@ -38,7 +40,7 @@ pub const ScriptEngine = struct {
         var lua = try Lua.init(allocator);
         lua.openLibs();
 
-        try reflect.registerAllLibs(lua, libs, .{ allocator, io, sceneRegistry, window, audioEngine, widgetRegistry, colorRegistry });
+        try reflect.registerAllLibs(lua, libs, .{ allocator, io, sceneRegistry, platform, audioEngine, windowManager, colorRegistry });
         try reflect.registerAllObjects(lua, objects);
 
         return .{ .lua = lua, .arena = arena, .allocator = allocator };

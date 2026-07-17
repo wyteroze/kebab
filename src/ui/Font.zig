@@ -9,6 +9,8 @@ const log = @import("../log.zig").font;
 
 const map_name = "map.toml";
 
+pub const TextSize = struct { w: u32, h: u32 };
+
 pub const Font = struct {
     pub const lua_ref = true;
     pub const name = "Font";
@@ -106,14 +108,14 @@ pub const Font = struct {
         return self.glyphs.get(codepoint);
     }
 
-    pub fn measure(self: Font, text: []const u8) !u32 {
-        var total: u32 = 0;
+    pub fn measure(self: Font, text: []const u8) !TextSize {
+        var width: u32 = 0;
         var view = (try std.unicode.Utf8View.init(text)).iterator();
         while (view.nextCodepoint()) |codepoint| {
-            if (self.glyphs.get(codepoint)) |g| total += g.advance;
+            if (self.glyphs.get(codepoint)) |g| width += g.advance;
         }
 
-        return total;
+        return .{ .w = width, .h = self.line_height };
     }
 
     pub fn deinit(self: *Font) void {

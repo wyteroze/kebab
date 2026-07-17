@@ -12,3 +12,6 @@ pub const Color = @import("../../Color.zig").Color;
 pub const Font = @import("../../ui/Font.zig").Font;
 pub const Vec2 = @import("Vec2.zig").Vec2;
 pub const Widget = @import("../../ui/Widget.zig").Widget;
+pub const Window = @import("../../Window.zig").Window;
+pub const WindowUI = @import("../../Window.zig").WindowUI;
+pub const WindowInput = @import("../../Window.zig").WindowInput;

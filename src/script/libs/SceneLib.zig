@@ -26,11 +26,4 @@ pub const SceneLib = struct {
 
         return .{ .ptr = scene };
     }
-
-    pub fn getCurrentScene(self: SceneLib) ?Handle(Scene) {
-        return .{ .ptr = self.registry.current_scene orelse return null };
-    }
-    pub fn setCurrentScene(self: *SceneLib, scene: Handle(Scene)) void {
-        self.registry.current_scene = scene.ptr;
-    }
 };

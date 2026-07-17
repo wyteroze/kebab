@@ -1,9 +1,9 @@
 // Copyright 2026 wyteroze. Licensed under the Apache License, Version 2.0.
 
 const Vec3 = @import("Vec3.zig").Vec3;
-const input_lib = @import("../libs/InputLib.zig");
-const InputCode = input_lib.InputCode;
-const InputValue = input_lib.InputValue;
+const input = @import("../../input/Input.zig");
+const InputCode = input.InputCode;
+const InputValue = input.InputValue;
 
 pub const InputEvent = struct {
     pub const hidden = .{ "code", "value", "delta" };
