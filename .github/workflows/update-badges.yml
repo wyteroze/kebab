@@ -29,7 +29,7 @@ jobs:
         run: pip install fonttools
 
       - name: Generate badges
-        run: python3 badge_gen/generate_all.py --repo .
+        run: python3 assets/badge_gen/generate_all.py --repo .
 
       - name: Commit updated badges
         run: |
