@@ -17,3 +17,4 @@ pub const WindowUI = @import("../../Window.zig").WindowUI;
 pub const WindowInput = @import("../../Window.zig").WindowInput;
 pub const Painter = @import("../../render/Painter.zig").Painter;
 pub const EngineLibFrameInfo = @import("../libs/EngineLib.zig").EngineLibFrameInfo;
+pub const EngineLibProfiler = @import("../libs/EngineLib.zig").EngineLibProfiler;

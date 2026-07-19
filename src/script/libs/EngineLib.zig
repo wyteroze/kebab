@@ -14,6 +14,13 @@ pub const EngineLibFrameInfo = struct {
     pub fn getFPS(self: EngineLibFrameInfo) f32 { return self.engine.fps; }
 };
 
+pub const EngineLibProfiler = struct {
+    pub const lua_ref = true;
+    pub const hidden = .{ "engine" };
+    engine: *Engine = undefined,
+
+};
+
 pub const EngineLib = struct {
     pub const name = "Engine";
     pub const hidden = .{ "engine" };
@@ -21,12 +28,14 @@ pub const EngineLib = struct {
     engine: *Engine,
 
     FrameInfo: EngineLibFrameInfo = .{},
+    Profiler: EngineLibProfiler = .{},
 
     pub fn init(allocator: std.mem.Allocator, engine: *Engine) EngineLib {
         return .{
             .allocator = allocator,
             .engine = engine,
-            .FrameInfo = .{ .engine = engine }
+            .FrameInfo = .{ .engine = engine },
+            .Profiler = .{ .engine = engine },
         };
     }
 
