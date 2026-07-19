@@ -2,6 +2,7 @@
 
 const std = @import("std");
 const sdl3 = @import("sdl3");
+const types = @import("types.zig");
 const Diagnostic = @import("script/shared.zig").Diagnostic;
 const WidgetRegistry = @import("WidgetRegistry.zig").WidgetRegistry;
 const WindowManager = @import("WindowManager.zig").WindowManager;
@@ -9,6 +10,8 @@ const RenderTarget = @import("render/RenderTarget.zig").RenderTarget;
 const Vec2 = @import("script/objects/Vec2.zig").Vec2;
 const Anchor = @import("ui/Widget.zig").Anchor;
 const Widget = @import("ui/Widget.zig").Widget;
+const WidgetData = @import("ui/Widget.zig").WidgetData;
+const ImageData = @import("ImageData.zig").ImageData;
 const Handle = @import("script/reflect/marshal.zig").Handle;
 const Color = @import("Color.zig").Color;
 const Callback = @import("script/shared.zig").Callback;
@@ -21,71 +24,61 @@ const InputCode = input.InputCode;
 
 pub const WindowUI = struct {
     pub const lua_ref = true;
-    pub const hidden = .{ "window" };
+    pub const hidden = .{ "window", "addRoot" };
     window: *Window = undefined,
 
-    pub fn Panel(self: *WindowUI, anchor: Anchor, offset: Vec2, size: Vec2) !Handle(Widget) {
+    fn addRoot(self: *WindowUI, anchor: Anchor, offset: Vec2, size: Vec2, data: WidgetData) !*Widget {
         const window = self.window;
-
-        const widget = try window.allocator.create(Widget);
-        errdefer window.allocator.destroy(widget);
-
-        widget.* = .{
-            .allocator = window.allocator,
-            .anchor = anchor,
-            .offset = offset.vec,
-            .size = size.vec,
-            .data = .{ .panel = .{ .bg = Color.fromARGB(255, 255, 255, 255) } },
-        };
+        const widget = try Widget.create(window.allocator, &window.registry, anchor, offset.vec, size.vec, data);
+        errdefer { widget.deinit(); window.allocator.destroy(widget); }
 
         try window.registry.addWidget(widget);
-        return .{ .ptr = widget };
+        return widget;
+    }
+
+    pub fn Panel(self: *WindowUI, anchor: Anchor, offset: Vec2, size: Vec2) !Handle(Widget) {
+        const w = try self.addRoot(anchor, offset, size, .{ .panel = .{ .bg = Color.fromARGB(255, 255, 255, 255) } });
+        return .{ .ptr = w };
     }
 
     pub fn Label(self: *WindowUI, anchor: Anchor, offset: Vec2, text: []const u8) !Handle(Widget) {
-        const window = self.window;
+        const owned = try self.window.allocator.dupe(u8, text);
+        errdefer self.window.allocator.free(owned);
 
-        const owned = try window.allocator.dupe(u8, text);
-        errdefer window.allocator.free(owned);
-
-        const widget = try window.allocator.create(Widget);
-        errdefer window.allocator.destroy(widget);
-
-        widget.* = .{
-            .allocator = window.allocator,
-            .anchor = anchor,
-            .offset = offset.vec,
-            .size = .{ 0, 0 }, // updated at draw time to reflect the size of the text
-            .data = .{ .label = .{ .content = .{ .text = owned, .color = Color.fromARGB(255, 255, 255, 255) } } },
-        };
-
-        try window.registry.addWidget(widget);
-        return .{ .ptr = widget };
+        const w = try self.addRoot(anchor, offset, Vec2{ .vec = .{ 0, 0 } }, .{ .label = .{ .content = .{ .text = owned, .color = Color.fromARGB(255, 255, 255, 255) } } });
+        return .{ .ptr = w };
     }
 
     pub fn Button(self: *WindowUI, anchor: Anchor, offset: Vec2, size: Vec2, text: []const u8) !Handle(Widget) {
-        const window = self.window;
+        const owned = try self.window.allocator.dupe(u8, text);
+        errdefer self.window.allocator.free(owned);
 
-        const owned = try window.allocator.dupe(u8, text);
-        errdefer window.allocator.free(owned);
+        const w = try self.addRoot(anchor, offset, size, .{ .button = .{
+            .bg = Color.fromARGB(255, 128, 128, 128),
+            .content = .{ .text = owned, .color = Color.fromARGB(255, 255, 255, 255) },
+        } });
 
-        const widget = try window.allocator.create(Widget);
-        errdefer window.allocator.destroy(widget);
+        return .{ .ptr = w };
+    }
 
-        widget.* = .{
-            .allocator = window.allocator,
-            .anchor = anchor,
-            .offset = offset.vec,
-            .size = size.vec,
-            .data = .{ .button = .{
-                .bg = Color.fromARGB(255, 128, 128, 128),
-                .state = .normal,
-                .content = .{ .text = owned, .color = Color.fromARGB(255, 255, 255, 255) }
-            } },
-        };
+    pub fn Canvas(self: *WindowUI, anchor: Anchor, offset: Vec2, size: Vec2) !Handle(Widget) {
+        const w = try self.addRoot(anchor, offset, size, .{ .canvas = .{} });
+        return .{ .ptr = w };
+    }
 
-        try self.window.registry.addWidget(widget);
-        return .{ .ptr = widget };
+    pub fn Image(self: *WindowUI, anchor: Anchor, offset: Vec2, size: Vec2, image: Handle(ImageData)) !Handle(Widget) {
+        const w = try self.addRoot(anchor, offset, size, .{ .image = .{ .image = image.ptr } });
+        return .{ .ptr = w };
+    }
+
+    pub fn Container(self: *WindowUI, anchor: Anchor, offset: Vec2, size: Vec2) !Handle(Widget) {
+        const w = try self.addRoot(anchor, offset, size, .{ .container = .{} });
+        return .{ .ptr = w };
+    }
+
+    pub fn ScrollContainer(self: *WindowUI, anchor: Anchor, offset: Vec2, size: Vec2) !Handle(Widget) {
+        const w = try self.addRoot(anchor, offset, size, .{ .scroll_container = .{} });
+        return .{ .ptr = w };
     }
 };
 
@@ -125,7 +118,11 @@ pub const WindowInput = struct {
 pub const Window = struct {
     pub const lua_ref = true;
     pub const lua_name = "WindowInstance";
-    pub const hidden = .{ "handle", "id", "target", "registry", "manager", "input", "update", "scene", "camera", "callbacks" };
+    pub const hidden = .{
+        "handle", "id", "target", "registry",
+        "manager", "input", "update", "scene", "camera",
+        "focus_callbacks", "close_callbacks", "focus_lost_callbacks"
+    };
     diagnostic: Diagnostic = .{},
     allocator: std.mem.Allocator,
 
@@ -141,10 +138,41 @@ pub const Window = struct {
 
     scene: ?*Scene = null,
     camera: ?*Object = null,
-    callbacks: std.ArrayList(Callback),
+    update_callbacks: std.ArrayList(Callback),
+    close_callbacks: std.ArrayList(Callback),
+    focus_callbacks: std.ArrayList(Callback),
+    focus_lost_callbacks: std.ArrayList(Callback),
+
+    // Ugly fix, but mouse movement is a float and window position
+    // is an int, so there's some loss between the two. we store our
+    // own internal position which has no loss, and set the real
+    // window position to it when needed.
+    pos: types.Vec2,
 
     pub fn getTitle(self: Window) ?[:0]const u8 { return self.handle.getTitle(); }
     pub fn setTitle(self: *Window, title: [:0]const u8) !void { try self.handle.setTitle(title); }
+
+    pub fn getPosition(self: Window) !Vec2 {
+        const realPos = try self.handle.getPosition();
+        const rx = @as(isize, @intFromFloat(@round(self.pos[0])));
+        const ry = @as(isize, @intFromFloat(@round(self.pos[1])));
+
+        // sdl disagrees with our internal window position, resync it
+        if (realPos[0] != rx or realPos[1] != ry) {
+            const mut_self = self.manager.find(self.id) orelse unreachable;
+            mut_self.pos = .{ @floatFromInt(realPos[0]), @floatFromInt(realPos[1]) };
+        }
+
+        return .{ .vec = self.pos };
+    }
+    pub fn setPosition(self: *Window, v: Vec2) !void {
+        self.pos = v.vec;
+
+        const px = @as(isize, @intFromFloat(v.vec[0]));
+        const py = @as(isize, @intFromFloat(v.vec[1]));
+
+        try self.handle.setPosition(.{ .absolute = px }, .{ .absolute = py });
+    }
 
     pub fn getScene(self: Window) ?Handle(Scene) {
         return .{ .ptr = self.scene orelse return null };
@@ -165,7 +193,7 @@ pub const Window = struct {
     }
 
     pub fn update(self: *Window, dt: f32) void {
-        for (self.callbacks.items) |cb| {
+        for (self.update_callbacks.items) |cb| {
             cb.call(.{ dt });
         }
     }
@@ -174,13 +202,44 @@ pub const Window = struct {
         self.manager.close(self);
     }
 
+    pub fn Minimize(self: *Window) !void {
+        try self.handle.minimize();
+    }
+
+    pub fn Maximize(self: *Window) !void {
+        try self.handle.maximize();
+    }
+
+    pub fn Focus(self: *Window) !void {
+        try self.manager.focus(self);
+    }
+
     pub fn OnUpdate(self: *Window, cb: Callback) !void {
-        try self.callbacks.append(self.allocator, cb);
+        try self.update_callbacks.append(self.allocator, cb);
+    }
+
+    pub fn OnClose(self: *Window, cb: Callback) !void {
+        try self.close_callbacks.append(self.allocator, cb);
+    }
+
+    pub fn OnFocus(self: *Window, cb: Callback) !void {
+        try self.focus_callbacks.append(self.allocator, cb);
+    }
+
+    pub fn OnFocusLost(self: *Window, cb: Callback) !void {
+        try self.focus_lost_callbacks.append(self.allocator, cb);
     }
 
     pub fn deinit(self: *Window) void {
-        for (self.callbacks.items) |cb| cb.deinit();
-        self.callbacks.deinit(self.allocator);
+        for (self.update_callbacks.items) |cb| cb.deinit();
+        for (self.close_callbacks.items) |cb| cb.deinit();
+        for (self.focus_callbacks.items) |cb| cb.deinit();
+        for (self.focus_lost_callbacks.items) |cb| cb.deinit();
+        self.update_callbacks.deinit(self.allocator);
+        self.close_callbacks.deinit(self.allocator);
+        self.focus_callbacks.deinit(self.allocator);
+        self.focus_lost_callbacks.deinit(self.allocator);
+
         self.input.deinit();
         self.registry.deinit();
         self.target.deinit();

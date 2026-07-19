@@ -9,3 +9,4 @@ pub const AudioLib = @import("AudioLib.zig").AudioLib;
 pub const ColorLib = @import("ColorLib.zig").ColorLib;
 pub const Vec2Lib = @import("Vec2Lib.zig").Vec2Lib;
 pub const WindowLib = @import("WindowLib.zig").WindowLib;
+pub const EngineLib = @import("EngineLib.zig").EngineLib;

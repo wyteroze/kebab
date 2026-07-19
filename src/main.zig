@@ -25,6 +25,7 @@ const Config        = @import("Config.zig").Config;
 const Color         = @import("Color.zig").Color;
 const Font          = @import("ui/Font.zig").Font;
 const Widget        = @import("ui/Widget.zig").Widget;
+const Engine        = @import("Engine.zig").Engine;
 const widget        = @import("ui/Widget.zig");
 const scene         = @import("Scene.zig");
 const perf          = @import("profile/perf.zig");
@@ -51,6 +52,8 @@ pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
     const io = init.io;
 
+    var engine = Engine.init(allocator);
+
     var threadRegistry = ThreadRegistry.init(io);
     defer threadRegistry.deinit();
 
@@ -66,7 +69,7 @@ pub fn main(init: std.process.Init) !void {
     var platform = try Platform.init();
     defer platform.deinit();
 
-    var windowManager = WindowManager.init(allocator, &platform);
+    var windowManager = WindowManager.init(allocator, &platform, &engine);
 
     var renderer = try Renderer.init(allocator);
     defer renderer.deinit();
@@ -79,37 +82,47 @@ pub fn main(init: std.process.Init) !void {
     var colorRegistry = try ColorRegistry.init(allocator, io);
     Color.registry = &colorRegistry;
 
-    var scriptEngine = try ScriptEngine.init(allocator, io, &sceneRegistry, &platform, &audioEngine, &windowManager, &colorRegistry);
+    var scriptEngine = try ScriptEngine.init(allocator, io, &sceneRegistry, &platform, &audioEngine, &windowManager, &colorRegistry, &engine);
     defer scriptEngine.deinit();
-    // Tear windows down before the script engine: their Lua callbacks (input
-    // bindings, OnClick, OnUpdate) must be unref'd while the Lua state is alive.
+
+    // Deinit these first, their lua callbacks need to be unrefed while lua is still alive.
     defer windowManager.deinit();
     defer widgetRegistry.deinit();
     defer sceneRegistry.deinit();
     defer colorRegistry.deinit();
+    defer engine.deinit();
 
     scriptEngine.runFile("src/assets/scripts/main.lua");
     log.info("Initialized", .{});
 
-    var running = true;
     var lastTimeMs: u64 = sdl3.timer.getPerformanceCounter();
     const frequency = @as(f32, @floatFromInt(sdl3.timer.getPerformanceFrequency()));
 
-    const font = try Font.loadFromFile(allocator, io, "src/assets/fonts/NinetyFive/");
+    const font = try Font.loadFromFile(allocator, io, "src/assets/fonts/ProggyClean/");
     defer font.deinit();
 
+    const fps_ns: f32 = 1_000_000_000.0 / @as(f32, @floatFromInt(config.fps));
+
     log.info("Starting loop", .{});
-    while (running) {
+    while (engine.running) {
         const currentTime = sdl3.timer.getPerformanceCounter();
         const dt = @as(f32, @floatFromInt(currentTime - lastTimeMs)) / frequency;
         lastTimeMs = currentTime;
 
+        engine.preStep();
+
         try perf.beginFrame("main"); {
             // events
             perf.start("events"); {
+                var want_quit: bool = false;
                 while (sdl3.events.poll()) |e| {
-                    if (!windowManager.handleEvent(e)) { running = false; break; }
+                    if (!windowManager.handleEvent(e)) {
+                        want_quit = true;
+                        break;
+                    }
                 }
+
+                if (want_quit) break;
             } perf.stop();
 
             // render scene
@@ -138,12 +151,21 @@ pub fn main(init: std.process.Init) !void {
             } perf.stop();
         } perf.endFrame();
 
-        // frame limiter
-        const fps_ns: f32 = 1_000_000_000.0 / @as(f32, @floatFromInt(config.fps));
         const frameTime = sdl3.timer.getPerformanceCounter() - currentTime;
         const frameTimeNs: f32 = @as(f32, @floatFromInt(frameTime)) * 1_000_000_000.0 / frequency;
+
+        // fill out engine info for this frame
+        engine.frame += 1;
+        engine.fps = 1.0 / (@as(f32, @floatFromInt(frameTime)) / frequency);
+
+        engine.postStep();
+
+        // frame limiter
         if (frameTimeNs < fps_ns) {
             sdl3.timer.delayNanosecondsPrecise(@intFromFloat(fps_ns - frameTimeNs));
         }
     }
+
+    const close_reason = if (engine.close_reason) |cr| @tagName(cr) else null;
+    log.info("Engine closing (reason: {?s})", .{ close_reason });
 }

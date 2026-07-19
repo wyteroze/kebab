@@ -109,18 +109,18 @@ pub const Font = struct {
         return self.glyphs.get(codepoint);
     }
 
-    pub fn measure(self: Font, text: []const u8) !TextSize {
+    pub fn measure(self: Font, text: []const u8, scale: u32) !TextSize {
         var width: u32 = 0;
         var view = (try std.unicode.Utf8View.init(text)).iterator();
         while (view.nextCodepoint()) |codepoint| {
-            if (self.glyphs.get(codepoint)) |g| width += g.advance;
+            if (self.glyphs.get(codepoint)) |g| width += g.advance * scale;
         }
 
-        return .{ .w = width, .h = self.line_height };
+        return .{ .w = width, .h = self.line_height * scale };
     }
 
-    pub fn MeasureText(self: Font, text: []const u8) !Vec2 {
-        const m = try self.measure(text);
+    pub fn MeasureText(self: Font, text: []const u8, scale: ?u32) !Vec2 {
+        const m = try self.measure(text, scale orelse 1);
 
         return Vec2.init(@floatFromInt(m.w), @floatFromInt(m.h));
     }

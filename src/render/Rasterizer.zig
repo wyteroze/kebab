@@ -116,6 +116,71 @@ pub fn wireframe(target: *RenderTarget, p0: Vec3, p1: Vec3, p2: Vec3, color: ?u3
     line(target, p2, p0, color);
 }
 
+/// Pixels between perspective divides. If resolution
+/// is large this may need to be turned down.
+const subspan_len: i32 = 16;
+
+fn texturedSpan(
+    target: *RenderTarget,
+    depth: []f32,
+    img_data: ImageData,
+    y: i32,
+    ax: i32,
+    bx: i32,
+    su: f32, sv: f32, sw: f32,
+    eu: f32, ev: f32, ew: f32,
+) void {
+    if (y < 0 or y >= @as(i32, @intCast(target.size_y))) return;
+    if (bx <= ax) return;
+
+    const x_start = @max(ax, 0);
+    const x_end = @min(bx, @as(i32, @intCast(target.size_x)));
+    if (x_end <= x_start) return;
+
+    const pixels = target.getPixels();
+    const row = @as(usize, @intCast(y)) * target.pitchPixels();
+    const depth_row = @as(usize, @intCast(y)) * target.size_x;
+
+    const inv_span = 1.0 / @as(f32, @floatFromInt(bx - ax));
+    const du = eu - su;
+    const dv = ev - sv;
+    const dw = ew - sw;
+
+    var x = x_start;
+    while (x < x_end) {
+        const chunk_end = @min(x + subspan_len, x_end);
+
+        const t0 = @as(f32, @floatFromInt(x - ax)) * inv_span;
+        const t1 = @as(f32, @floatFromInt(chunk_end - ax)) * inv_span;
+
+        const w0 = sw + dw * t0;
+        const w1 = sw + dw * t1;
+        const inv_w0 = if (w0 != 0) 1.0 / w0 else 0;
+        const inv_w1 = if (w1 != 0) 1.0 / w1 else 0;
+
+        var u = (su + du * t0) * inv_w0;
+        var v = (sv + dv * t0) * inv_w0;
+        var w = w0;
+
+        const inv_n = 1.0 / @as(f32, @floatFromInt(chunk_end - x));
+        const u_step = ((su + du * t1) * inv_w1 - u) * inv_n;
+        const v_step = ((sv + dv * t1) * inv_w1 - v) * inv_n;
+        const w_step = (w1 - w0) * inv_n;
+
+        while (x < chunk_end) : (x += 1) {
+            const idx = depth_row + @as(usize, @intCast(x));
+            if (w > depth[idx]) {
+                pixels[row + @as(usize, @intCast(x))] = img_data.sample(u, v);
+                depth[idx] = w;
+            }
+
+            u += u_step;
+            v += v_step;
+            w += w_step;
+        }
+    }
+}
+
 // I'm sorry
 pub fn texturedTriangle(target: *RenderTarget, tri: Triangle, img_data: ImageData) void {
     const depth = target.depthbuffer orelse return;
@@ -202,25 +267,11 @@ pub fn texturedTriangle(target: *RenderTarget, tri: Triangle, img_data: ImageDat
                 std.mem.swap(f32, &tex_sw, &tex_ew);
             }
 
-            const tstep = 1.0 / @as(f32, @floatFromInt(bx - ax));
-            var t: f32 = 0.0;
-
-            var j: i32 = ax;
-            while (j < bx) : (j += 1) {
-                const tex_u = (1.0 - t) * tex_su + t * tex_eu;
-                const tex_v = (1.0 - t) * tex_sv + t * tex_ev;
-                const tex_w = (1.0 - t) * tex_sw + t * tex_ew;
-
-                if (i < 0 or j < 0) continue;
-                const idx = @as(usize, @intCast(i)) * @as(usize, @intCast(target.size_x)) + @as(usize, @intCast(j));
-                if (idx >= depth.len) continue;
-                if (tex_w > depth[idx]) {
-                    point(target, @floatFromInt(j), @floatFromInt(i), img_data.sample(tex_u / tex_w, tex_v / tex_w));
-                    depth[idx] = tex_w;
-                }
-
-                t += tstep;
-            }
+            texturedSpan(
+                target, depth, img_data, i, ax, bx,
+                tex_su, tex_sv, tex_sw,
+                tex_eu, tex_ev, tex_ew,
+            );
         }
     }
 
@@ -264,25 +315,11 @@ pub fn texturedTriangle(target: *RenderTarget, tri: Triangle, img_data: ImageDat
                 std.mem.swap(f32, &tex_sw, &tex_ew);
             }
 
-            const tstep: f32 = 1.0 / @as(f32, @floatFromInt(bx - ax));
-            var t: f32 = 0.0;
-
-            var j: i32 = ax;
-            while (j < bx) : (j += 1) {
-                const tex_u = (1.0 - t) * tex_su + t * tex_eu;
-                const tex_v = (1.0 - t) * tex_sv + t * tex_ev;
-                const tex_w = (1.0 - t) * tex_sw + t * tex_ew;
-
-                if (i < 0 or j < 0) continue;
-                const idx = @as(usize, @intCast(i)) * @as(usize, @intCast(target.size_x)) + @as(usize, @intCast(j));
-                if (idx >= depth.len) continue;
-                if (tex_w > depth[idx]) {
-                    point(target, @floatFromInt(j), @floatFromInt(i), img_data.sample(tex_u / tex_w, tex_v / tex_w));
-                    depth[idx] = tex_w;
-                }
-
-                t += tstep;
-            }
+            texturedSpan(
+                target, depth, img_data, i, ax, bx,
+                tex_su, tex_sv, tex_sw,
+                tex_eu, tex_ev, tex_ew,
+            );
         }
     }
 }

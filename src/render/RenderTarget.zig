@@ -9,11 +9,22 @@ pub const RenderTarget = struct {
     allocator: std.mem.Allocator,
     window: sdl3.video.Window,
     canvas: sdl3.surface.Surface,
+    renderer: sdl3.render.Renderer,
+    texture: sdl3.render.Texture,
     depthbuffer: ?[]f32,
     size_x: usize,
     size_y: usize,
     scale: f32,
-    opaque_bg: bool,
+    transparent: bool,
+
+    fn makeTexture(renderer: sdl3.render.Renderer, size_x: usize, size_y: usize, transparent: bool) !sdl3.render.Texture {
+        const texture = try renderer.createTexture(.array_bgra_32, .streaming, size_x, size_y);
+        // keep it crispy
+        try texture.setScaleMode(.nearest);
+        try texture.setBlendMode(if (transparent) .blend else .none);
+
+        return texture;
+    }
 
     pub fn init(
         allocator: std.mem.Allocator,
@@ -22,10 +33,17 @@ pub const RenderTarget = struct {
         size_y: usize,
         scale: f32,
         want_depth: bool,
-        opaque_bg: bool,
+        transparent: bool,
     ) !RenderTarget {
         const canvas = try sdl3.surface.Surface.init(size_x, size_y, .array_bgra_32);
+        errdefer canvas.deinit();
         try canvas.setBlendMode(.none);
+
+        const renderer = try sdl3.render.Renderer.init(window, null);
+        errdefer renderer.deinit();
+
+        const texture = try makeTexture(renderer, size_x, size_y, transparent);
+        errdefer texture.deinit();
 
         const depthbuffer = if (want_depth)
             try allocator.alloc(f32, size_x * size_y)
@@ -36,15 +54,19 @@ pub const RenderTarget = struct {
             .allocator = allocator,
             .window = window,
             .canvas = canvas,
+            .renderer = renderer,
+            .texture = texture,
             .depthbuffer = depthbuffer,
             .size_x = size_x,
             .size_y = size_y,
             .scale = scale,
-            .opaque_bg = opaque_bg,
+            .transparent = transparent,
         };
     }
 
     pub fn deinit(self: *RenderTarget) void {
+        self.texture.deinit();
+        self.renderer.deinit();
         self.canvas.deinit();
         if (self.depthbuffer) |db| self.allocator.free(db);
     }
@@ -54,6 +76,10 @@ pub const RenderTarget = struct {
         try canvas.setBlendMode(.none);
         self.canvas.deinit();
         self.canvas = canvas;
+
+        const texture = try makeTexture(self.renderer, size_x, size_y, self.transparent);
+        self.texture.deinit();
+        self.texture = texture;
 
         if (self.depthbuffer != null) {
             self.allocator.free(self.depthbuffer.?);
@@ -65,14 +91,15 @@ pub const RenderTarget = struct {
     }
 
     pub fn present(self: RenderTarget) !void {
-        const surface = try sdl3.video.Window.getSurface(self.window);
-
         perf.start("blit"); {
-            try self.canvas.blitScaled(null, surface, null, .nearest);
+            const bytes = self.canvas.getPixels().?;
+            try self.texture.update(null, bytes.ptr, @intCast(self.canvas.value.pitch));
         } perf.stop();
 
         perf.start("copy"); {
-            try self.window.updateSurface();
+            try self.renderer.clear();
+            try self.renderer.renderTexture(self.texture, null, null);
+            try self.renderer.present();
         } perf.stop();
     }
 
@@ -87,7 +114,7 @@ pub const RenderTarget = struct {
         return ptr[0 .. bytes.len / @sizeOf(u32)];
     }
 
-    inline fn pitchPixels(self: RenderTarget) usize {
+    pub inline fn pitchPixels(self: RenderTarget) usize {
         return @divExact(@as(usize, @intCast(self.canvas.value.pitch)), @sizeOf(u32));
     }
 
@@ -125,7 +152,7 @@ pub const RenderTarget = struct {
         const out_g = (g_src * a + g_dst * (255 - a)) / 255;
         const out_b = (b_src * a + b_dst * (255 - a)) / 255;
 
-        const out_a = if (self.opaque_bg) @as(u32, 0xFF) else blk: {
+        const out_a = if (!self.transparent) @as(u32, 0xFF) else blk: {
             const a_dst = (dst >> 24) & 0xFF;
             break :blk a + a_dst * (255 - a) / 255;
         };

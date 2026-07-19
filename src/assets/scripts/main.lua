@@ -2,6 +2,8 @@
 Copyright 2026 wyteroze. Licensed under the Apache License, Version 2.0.
 --]]
 
+local inspector = require("core.inspector")
+
 local camera = Object.camera()
 camera.Position = Vec3.new(0, 0, -5)
 
@@ -9,14 +11,19 @@ local scene = Scene.new("Test scene")
 scene.SkyboxTexture = Assets.loadImage("skyboxes/Ocean-1.bmp")
 
 local window = Window.new("Game window", 540, 360, 2)
+window:OnClose(function()
+    Engine.quit()
+end)
+window:OnFocusLost(function()
+    window.Input.MouseVisible = true
+    window.Input.MouseLocked = false
+end)
+window.Input:OnEnd("F9", function(input)
+    inspector:toggleOpen()
+end)
 
 window.Camera = camera
 window.Scene = scene
-
-local font = Assets.loadFont("NinetyFive")
-print(font:MeasureText("hello world"))
-
-window.UI:Button("Top", Vec2.new(0, 0), Vec2.new(64, 64), "hello")
 
 local bullyMoonMesh = Assets.loadMesh("bullymoon.obj")
 local bullyMoonTex = Assets.loadImage("bullymoon.bmp")

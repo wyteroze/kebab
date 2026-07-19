@@ -271,14 +271,12 @@ pub fn wrapIndex(comptime Lib: type, name: [:0]const u8) fn (*Lua) i32 {
             inline for (comptime std.meta.fields(Lib)) |f| {
                 if (comptime isHidden(Lib, f.name)) continue;
                 if (std.mem.eql(u8, f.name, key)) {
-                    // Ref-type fields are handed back by reference (a Handle to the
-                    // field's real address) so their methods can reach the parent,
-                    // and so we don't box a fresh copy on every access.
                     if (comptime isRefType(f.type)) {
                         push(l, Handle(f.type){ .ptr = &@field(self.*, f.name) });
                     } else {
                         push(l, @field(self.*, f.name));
                     }
+
                     return 1;
                 }
             }
@@ -336,13 +334,32 @@ pub fn wrapModuleIndex(comptime Lib: type, name: [:0]const u8) fn (*Lua) i32 {
             inline for (comptime std.meta.fields(Lib)) |f| {
                 if (comptime isHidden(Lib, f.name)) continue;
                 if (std.mem.eql(u8, f.name, key)) {
-                    push(l, @field(self.*, f.name));
+                    if (comptime isRefType(f.type)) {
+                        push(l, Handle(f.type){ .ptr = &@field(self.*, f.name) });
+                    } else {
+                        push(l, @field(self.*, f.name));
+                    }
+
                     return 1;
                 }
             }
 
             inline for (comptime std.meta.declarations(Lib)) |d| {
                 if (comptime isHidden(Lib, d.name)) continue;
+
+                // W zig
+                const is_getter = comptime (d.name.len > 3 and d.name[0] == 'g' and d.name[1] == 'e' and d.name[2] == 't');
+                if (is_getter) {
+                    const field = comptime d.name[3..];
+
+                    if (std.mem.eql(u8, key, field)) {
+                        const getter = @field(Lib, d.name);
+                        const result = @call(.auto, getter, .{ self.* });
+                        push(l, result);
+                        return 1;
+                    }
+                }
+
                 if (std.mem.eql(u8, d.name, key)) {
                     const decl = @field(Lib, d.name);
 
@@ -466,6 +483,7 @@ fn trimmedName(comptime T: type) [:0]const u8 {
 }
 
 fn isHidden(comptime T: type, comptime name: [:0]const u8) bool {
+    @setEvalBranchQuota(100000);
     if (std.mem.eql(u8, "allocator", name) or
         std.mem.eql(u8, "io", name) or
         std.mem.eql(u8, "init", name) or

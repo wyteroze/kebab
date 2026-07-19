@@ -5,3 +5,4 @@ src/assets/models/utah_teapot_30x.obj
 export.json
 .venv
 .DS_Store
+chars.txt

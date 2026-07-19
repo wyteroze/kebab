@@ -9,12 +9,24 @@ Copyright 2026 wyteroze. Licensed under the Apache License, Version 2.0.
 --- Accessed via `window.UI`.
 --- @class WindowUI
 ---
+--- Every widget made here is a root, positioned relative to the whole window.
+--- To nest widgets, make a Container (or a ScrollContainer) and use its own
+--- builder methods to add children.
+---
 --- Creates a Panel in this window. A panel is a colored rectangle, with an optional border.
---- @field Panel fun(self: WindowUI, anchor: Anchor, offset: Vec2, size: Vec2): Widget
+--- @field Panel fun(self: WindowUI, anchor: Anchor, offset: Vec2, size: Vec2): Panel
 --- Creates a Label in this window. A label sizes itself from its font and text, so no size is given.
---- @field Label fun(self: WindowUI, anchor: Anchor, offset: Vec2, text: string): Widget
---- Creates a Button in this window. Use the returned button's OnClick event to respond to clicks.
---- @field Button fun(self: WindowUI, anchor: Anchor, offset: Vec2, size: Vec2, text: string): Widget
+--- @field Label fun(self: WindowUI, anchor: Anchor, offset: Vec2, text: string): Label
+--- Creates a Button in this window.
+--- @field Button fun(self: WindowUI, anchor: Anchor, offset: Vec2, size: Vec2, text: string): Button
+--- Creates a Canvas in this window.
+--- @field Canvas fun(self: WindowUI, anchor: Anchor, offset: Vec2, size: Vec2): Canvas
+--- Creates an Image in this window, drawing the given image.
+--- @field Image fun(self: WindowUI, anchor: Anchor, offset: Vec2, size: Vec2, image: ImageData): Image
+--- Creates a Container in this window, which holds and arranges child widgets.
+--- @field Container fun(self: WindowUI, anchor: Anchor, offset: Vec2, size: Vec2): Container
+--- Creates a ScrollContainer in this window, a container whose contents scroll with the mouse wheel.
+--- @field ScrollContainer fun(self: WindowUI, anchor: Anchor, offset: Vec2, size: Vec2): ScrollContainer
 
 --- A window's input namespace. Only receives input while the window is focused.
 --- Accessed via `window.Input`.
@@ -57,6 +69,9 @@ Copyright 2026 wyteroze. Licensed under the Apache License, Version 2.0.
 --- The window's title text.
 --- @field Title string
 ---
+--- The window's top-left position on screen, in pixels.
+--- @field Position Vec2
+---
 --- Widget creation for this window. See WindowUI.
 --- @field UI WindowUI
 --- Per-window input. See WindowInput.
@@ -68,8 +83,26 @@ Copyright 2026 wyteroze. Licensed under the Apache License, Version 2.0.
 --- from this window's input. For scene-wide updates, use Scene:OnUpdate instead.
 --- @field OnUpdate fun(self: Window, callback: fun(delta: number))
 ---
+--- Attaches a function to when this window is closed.
+--- The function is called right before the window is truly closed.
+--- @field OnClose fun(self: Window, callback: fun())
+---
+--- Attaches a function to when this window is focused.
+--- @field OnFocus fun(self: Window, callback: fun())
+---
+--- Attaches a function to when this window loses focus.
+--- @field OnFocusLost fun(self: Window, callback: fun())
+---
 --- Closes and destroys the window. Any remaining references to it become invalid.
 --- @field Close fun(self: Window)
+---
+--- Minimizes the window.
+--- @field Minimize fun(self: Window)
+--- Maximizes the window.
+--- @field Maximize fun(self: Window)
+---
+--- Focuses the window, both bringing it to front and capturing input.
+--- @field Focus fun(self: Window)
 
 --- Factory for creating windows. The engine opens no window on its own; the
 --- first Window.new call creates the game window.
@@ -82,5 +115,8 @@ Window = {}
 --- @param width integer
 --- @param height integer
 --- @param scale number?
+--- @param decorated boolean?
+--- @param transparent boolean?
+--- @param resizable boolean?
 --- @return Window
-function Window.new(title, width, height, scale) end
+function Window.new(title, width, height, scale, decorated, transparent, resizable) end

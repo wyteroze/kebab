@@ -16,6 +16,7 @@ const AudioEngine = @import("../audio/AudioEngine.zig").AudioEngine;
 const ColorRegistry = @import("../ColorRegistry.zig").ColorRegistry;
 const WindowManager = @import("../WindowManager.zig").WindowManager;
 const Platform = @import("../Platform.zig").Platform;
+const Engine = @import("../Engine.zig").Engine;
 
 pub const ScriptEngine = struct {
     lua: *Lua,
@@ -30,6 +31,7 @@ pub const ScriptEngine = struct {
         audioEngine: *AudioEngine,
         windowManager: *WindowManager,
         colorRegistry: *ColorRegistry,
+        engine: *Engine,
     ) !ScriptEngine {
         const arena = try allocator.create(std.heap.ArenaAllocator);
         arena.* = std.heap.ArenaAllocator.init(allocator);
@@ -40,8 +42,13 @@ pub const ScriptEngine = struct {
         var lua = try Lua.init(allocator);
         lua.openLibs();
 
-        try reflect.registerAllLibs(lua, libs, .{ allocator, io, sceneRegistry, platform, audioEngine, windowManager, colorRegistry });
+        try reflect.registerAllLibs(lua, libs, .{ allocator, io, sceneRegistry, platform, audioEngine, windowManager, colorRegistry, engine });
         try reflect.registerAllObjects(lua, objects);
+
+        // load core systems
+        lua.doFile("src/assets/scripts/core/core.lua") catch {
+            log.err("failed to load core.lua: '{s}'", .{ lua.toString(-1) catch "unknown error" });
+        };
 
         return .{ .lua = lua, .arena = arena, .allocator = allocator };
     }
