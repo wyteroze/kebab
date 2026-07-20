@@ -12,6 +12,13 @@ pub const MemoryRegistry = struct {
         return .{ .allocator = allocator, .categories = .init(allocator) };
     }
 
+    pub fn deinit(self: *MemoryRegistry) void {
+        var iter = self.categories.iterator();
+        while (iter.next()) |c| self.allocator.destroy(c.value_ptr.*);
+
+        self.categories.deinit();
+    }
+
     /// Creates a category and returns its associated allocator. All allocations and deallocations
     /// are tracked; retrieve the usage info via `MemoryRegistry.getCategoryUsage()`
     pub fn createCategory(self: *MemoryRegistry, category: []const u8) !std.mem.Allocator {

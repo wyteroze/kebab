@@ -77,7 +77,7 @@ pub const Engine = struct {
             .default_font = try .loadFromFile(allocator, io, DEFAULT_FONT_PATH),
             .last_time_ms = sdl3.timer.getPerformanceCounter(),
             .frequency = @floatFromInt(sdl3.timer.getPerformanceFrequency()),
-            .memory_registry = memory_registry
+            .memory_registry = undefined
         };
 
         self.window_manager = .init(try memory_registry.createCategory("Window manager"), &self.platform, self);
@@ -88,6 +88,7 @@ pub const Engine = struct {
         Color.registry = &self.color_registry;
 
         self.script_engine.runFile("src/assets/scripts/main.lua");
+        self.memory_registry = memory_registry;
         log.info("Initialized", .{});
     }
 
@@ -169,8 +170,9 @@ pub const Engine = struct {
         self.color_registry.deinit();
         self.default_font.deinit();
 
-        // calling this last is important!
+        // calling these last is important!
         self.script_engine.deinit();
+        self.memory_registry.deinit();
     }
 
     pub fn quit(self: *Engine, reason: CloseReason) void {
